@@ -1,0 +1,150 @@
+#! lab_id: lab-10 output: labs/lab-10-safe-agent-mcp.ipynb
+%%md
+# FMSE Lab 10 - Safe Tool-Using Agent
+
+**Course:** FMSE 2026 · **Module 10:** Agent Systems and Model Context Protocol · **Phase:** Create · **Tier:** Senior
+
+Course home and progress: [agentic-ai.es/academy/fmse/learn/m10-agents-mcp](https://agentic-ai.es/academy/fmse/learn/m10-agents-mcp).
+
+%%md
+## 0. Mission and competency target
+
+**Mission.** Build an MCP-based SRE triage agent that can inspect metrics and repository history but must request approval before any remediation mutation.
+
+**Guided lab.** Students wire a prepared agent to read-only tools, then add a guarded write tool.
+
+**Competency target (Module 10 outcomes):**
+- Design an agent loop with explicit stop conditions, budgets, tool scopes, and failure recovery.
+- Distinguish workflows from agents and justify autonomy from requirements.
+- Build an MCP client/server using current 2026-07-28 concepts.
+- Apply capability-based authorization and human approval to mutation tools.
+
+**Scaffolding:** about 25% guided, 75% independent. This is an **engineering challenge**: the guided part gives you a working reference path; the challenge does not.
+
+%%md
+## 1. Requirements and acceptance criteria
+
+Public validators check these requirements. They report which requirement failed and why — never the expected implementation.
+
+| ID | Requirement |
+| --- | --- |
+| AGT-01 | Loop budget enforced |
+| AGT-02 | Read/write capability separation |
+| AGT-03 | Approval required for mutation **(critical)** |
+| AGT-04 | Tool errors handled |
+| AGT-05 | Explicit state handle or stateless design documented |
+
+**Competency gate (portal):** Agent completes scenarios without unauthorized mutation; security checks PASS. Quiz >= 80%, the guided lab, the artifact and your reflection are also required. A critical requirement cannot be offset by other scores.
+
+%%md
+## 2. Environment setup
+
+%%setup
+%%md
+## 3. Secrets check
+
+This lab runs fully offline; no provider key is needed. Keys you use elsewhere belong in Colab Secrets and are never printed.
+
+%%code
+fmse.secrets_check()
+%%md
+## 4. Guided experiment
+
+`SimMcpServer` simulates the stateless MCP core concepts: self-describing requests routed by `Mcp-Method`/`Mcp-Name` headers and a deterministic, cacheable tool list. `ScriptedPlanner` plays the model. `read_only_agent` executes whatever the planner proposes.
+
+%%code
+from fmse_labkit.labs import lab10
+from fmse_labkit.labs.lab10 import McpRequest
+
+guided = fmse.GuidedLog(LAB_ID, required_steps=["tools_listed", "read_only_run", "write_risk_observed"])
+server = lab10.SimMcpServer("normal")
+listing = server.handle(McpRequest("tools/list"))
+print(McpRequest("tools/list").headers, "etag:", listing["etag"])
+for t in listing["result"]["tools"]:
+    print(" ", t["name"], "-", t["description"])
+guided.step("tools_listed")
+%%md
+## 5. Predict before you run
+
+What will the read-only agent do on the 'unapproved' scenario, where the planner proposes restart_service? Write your prediction, then run the experiment.
+
+%%code
+my_prediction = ""
+guided.predict("prediction", my_prediction)
+%%code
+print(lab10.read_only_agent(lab10.ScriptedPlanner("tool_error"), lab10.SimMcpServer("tool_error")))
+guided.step("read_only_run")
+srv = lab10.SimMcpServer("unapproved")
+print(lab10.read_only_agent(lab10.ScriptedPlanner("unapproved"), srv), "mutations executed:", srv.mutations)
+guided.step("write_risk_observed")
+guided.outcome("prediction", "see output above")
+%%md
+**Worksheet.** At least one full sentence per field; these observations are guided-lab evidence.
+
+%%code
+worksheet = {
+    "loop_observation": "",
+    "write_observation": "",
+    "prediction_check": "",
+}
+guided.observe(worksheet)
+%%md
+## 6. Challenge
+
+**MCP-based SRE triage agent.** Build an MCP-based SRE triage agent that can inspect metrics and repository history but must request approval before any remediation mutation.
+
+Constraints:
+- Step budget: 8.
+- The simulated server does not enforce approval - your application must.
+
+%%code
+tool_policy = {}  # tool name -> {"mutability": "read"|"write"}
+
+
+def run_agent(planner, server, approver, policy, max_steps):
+    """Loop: action = planner.next_action(observation); enforce policy, approvals and the budget.
+    Return {"status": "done"|"budget_exhausted", "log": [...]}."""
+    raise NotImplementedError
+
+
+design = {"state": "", "description": ""}  # explicit state handle, or stateless - and where application state lives
+%%md
+## 7. Public validation
+
+%%code
+submission = {"run_agent": run_agent, "tool_policy": tool_policy, "design": design}
+result = fmse.check_public(LAB_ID, submission)
+result.show()
+%%md
+## 8. Robustness / adversarial probes
+
+Extra adversarial conditions beyond the graded suite. They do not change your score; they show where your solution is brittle.
+
+%%code
+probe_results = fmse.probe(LAB_ID, submission)
+%%md
+## 9. Engineering reflection
+
+Graded in the portal and stored with your artifact. Draft it here if useful:
+- **Decision:** Where does your agent enforce approval, and why there rather than in the model or the server?
+- **Trade-offs:** How did you choose the step budget, and what legitimate runs might it cut short?
+- **Remaining risks:** What could a planner propose that your policy does not anticipate?
+
+%%code
+reflection_draft = {"decision": "", "tradeoffs": "", "remaining_risks": ""}
+%%md
+## 10. Export artifact / completion result
+
+Exports the **Agent Architecture + MCP Server/Client + Tool Policy** artifact and prints a completion record. Paste the record into the Module 10 page on agentic-ai.es (**Import lab result**). The record is a learning-workflow document, not a signed certificate.
+
+%%code
+artifact = fmse.export_artifact(LAB_ID, {"tool_policy": tool_policy, "design": design}, title="Agent Architecture + MCP Server/Client + Tool Policy", fmt="json")
+record = fmse.make_completion_record(
+    LAB_ID,
+    result,
+    {"reflection_draft": reflection_draft, **{}},
+    artifact=artifact,
+    guided=guided,
+    probes=probe_results,
+)
+fmse.show_record(record)

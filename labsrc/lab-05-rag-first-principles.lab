@@ -1,0 +1,155 @@
+#! lab_id: lab-05 output: labs/lab-05-rag-first-principles.ipynb
+%%md
+# FMSE Lab 05 - RAG from First Principles
+
+**Course:** FMSE 2026 · **Module 5:** Search, Grounding, RAG, and Information Architecture · **Phase:** Research · **Tier:** Engineer
+
+Course home and progress: [agentic-ai.es/academy/fmse/learn/m05-rag-grounding](https://agentic-ai.es/academy/fmse/learn/m05-rag-grounding).
+
+%%md
+## 0. Mission and competency target
+
+**Mission.** Improve a deliberately weak RAG pipeline to meet a target retrieval recall and grounded-answer threshold without exceeding a context budget.
+
+**Guided lab.** Students build a small retriever over a curated corpus, then add reranking and provenance.
+
+**Competency target (Module 5 outcomes):**
+- Design a retrieval pipeline with chunking, metadata, filtering, ranking/reranking, and provenance.
+- Distinguish retrieval quality from generation quality.
+- Evaluate grounding with retrieval metrics and answer-level evidence checks.
+- Handle freshness, access control, conflicting sources, and "I do not know" behavior.
+
+**Scaffolding:** about 25% guided, 75% independent. This is an **engineering challenge**: the guided part gives you a working reference path; the challenge does not.
+
+%%md
+## 1. Requirements and acceptance criteria
+
+Public validators check these requirements. They report which requirement failed and why — never the expected implementation.
+
+| ID | Requirement |
+| --- | --- |
+| RAG-01 | Retrieval benchmark exists |
+| RAG-02 | Source IDs preserved end to end |
+| RAG-03 | Unauthorized documents excluded **(critical)** |
+| RAG-04 | Conflicting evidence test handled |
+| RAG-05 | Context budget enforced |
+| RAG-06 | Grounded-answer threshold met on the held-out public set |
+
+**Competency gate (portal):** Public tests PASS; grounded-answer score threshold met on held-out public set. Quiz >= 80%, the guided lab, the artifact and your reflection are also required. A critical requirement cannot be offset by other scores.
+
+%%md
+## 2. Environment setup
+
+%%setup
+%%md
+## 3. Secrets check
+
+This lab runs fully offline; no provider key is needed. Keys you use elsewhere belong in Colab Secrets and are never printed.
+
+%%code
+fmse.secrets_check()
+%%md
+## 4. Guided experiment
+
+A curated policy corpus with access control lists, versions and a conflicting pair of travel policies. `lab05.weak_retrieve` / `lab05.weak_answer` are the deliberately weak baseline (whole documents, no access control, no budget).
+
+%%code
+from fmse_labkit.labs import lab05
+from fmse_labkit.model import approx_tokens
+
+guided = fmse.GuidedLog(LAB_ID, required_steps=["baseline_measured", "bm25_built", "provenance_added"])
+for d in lab05.CORPUS:
+    print(d["doc_id"], d["acl"], d["version"], "-", d["title"])
+%%md
+## 5. Predict before you run
+
+What will go wrong with the weak baseline for an employee asking about salary bands, and for the per-diem question? Write your prediction, then run the experiment.
+
+%%code
+my_prediction = ""
+guided.predict("prediction", my_prediction)
+%%code
+toy_bench = [{"query": h["query"], "user": h["user"], "expected_docs": h["expected_docs"]} for h in lab05.HELD_OUT[:6]]
+print("weak recall@3:", lab05.recall_at_k(lab05.weak_retrieve, toy_bench))
+w = lab05.weak_answer("What is the salary band for engineer level 3?", "employee")
+print("weak context tokens:", approx_tokens(w["context"]), "| retrieved:", w["retrieved"])
+guided.step("baseline_measured")
+chunks = [c for d in lab05.CORPUS for c in lab05.chunk(d, "sentence")]
+index = lab05.BM25Index(chunks)
+print(index.search("per diem domestic travel", k=3))
+guided.step("bm25_built")
+print("Each chunk keeps doc_id, version, effective date and acl:", chunks[0])
+guided.step("provenance_added")
+guided.outcome("prediction", "see output above")
+%%md
+**Worksheet.** At least one full sentence per field; these observations are guided-lab evidence.
+
+%%code
+worksheet = {
+    "baseline_failures": "",
+    "reranking_effect": "",
+    "prediction_check": "",
+}
+guided.observe(worksheet)
+%%md
+## 6. Challenge
+
+**Fix a weak RAG pipeline.** Improve a deliberately weak RAG pipeline to meet a target retrieval recall and grounded-answer threshold without exceeding a context budget.
+
+Constraints:
+- Context budget: 400 tokens per answer.
+- Targets on the held-out public set: recall@3 >= 0.80 and grounded answers >= 0.80.
+
+%%code
+def retrieve(query, user, k=3):
+    """Return up to k chunks (dicts with doc_id, ...) that this user may see, best first."""
+    raise NotImplementedError
+
+
+def answer(query, user):
+    """Return {"answer", "citations", "conflict", "context", "retrieved"} within lab05.CONTEXT_BUDGET_TOKENS."""
+    raise NotImplementedError
+
+
+my_benchmark = []  # 10+ {"query", "user", "expected_docs"}
+%%md
+## 7. Public validation
+
+%%code
+submission = {"retrieve": retrieve, "answer": answer, "benchmark": my_benchmark}
+result = fmse.check_public(LAB_ID, submission)
+result.show()
+%%md
+## 8. Robustness / adversarial probes
+
+Extra adversarial conditions beyond the graded suite. They do not change your score; they show where your solution is brittle.
+
+%%code
+probe_results = fmse.probe(LAB_ID, submission)
+%%md
+## 9. Engineering reflection
+
+Graded in the portal and stored with your artifact. Draft it here if useful:
+- **Decision:** Which change moved recall or groundedness the most, and at which layer did it act?
+- **Trade-offs:** What did the context budget force you to leave out, and how did you choose?
+- **Remaining risks:** Where could your pipeline still answer confidently from the wrong or stale evidence?
+
+%%code
+reflection_draft = {"decision": "", "tradeoffs": "", "remaining_risks": ""}
+%%md
+## 10. Export artifact / completion result
+
+Exports the **Information Architecture + Retrieval Benchmark** artifact and prints a completion record. Paste the record into the Module 5 page on agentic-ai.es (**Import lab result**). The record is a learning-workflow document, not a signed certificate.
+
+%%code
+artifact = fmse.export_artifact(LAB_ID, {"design": "Describe chunking, metadata, access control and conflict policy here.", "benchmark": my_benchmark,
+                            "held_out": {k: result.evidence.get(k) for k in ("recall_at_3", "grounded_rate")}}, title="Information Architecture + Retrieval Benchmark", fmt="json")
+record = fmse.make_completion_record(
+    LAB_ID,
+    result,
+    {"reflection_draft": reflection_draft, **{}},
+    artifact=artifact,
+    guided=guided,
+    probes=probe_results,
+)
+fmse.show_record(record)

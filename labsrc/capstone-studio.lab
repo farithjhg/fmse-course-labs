@@ -1,0 +1,169 @@
+#! lab_id: capstone output: capstone/capstone-studio.ipynb
+%%md
+# FMSE Capstone - Capstone Studio: High-Assurance Enterprise AI System
+
+**Course:** FMSE 2026 · **Module 16:** Capstone · **Phase:** Capstone · **Tier:** Architect
+
+Course home, milestone tracker and defense pack: [agentic-ai.es/academy/fmse/capstone](https://agentic-ai.es/academy/fmse/capstone).
+
+%%md
+## 0. Mission and competency target
+
+**Mission.** Build an enterprise financial reconciliation assistant from requirements and evidence: ingest bank exports, reconcile them against ledger entries, explain discrepancies with evidence, classify confidence, and prepare proposed actions — with every financial mutation behind explicit approval. Then defend the architecture.
+
+**Competency target (Module 16 outcomes):**
+- Deliver an end-to-end AI system whose architecture is traceable to stakeholder needs and requirements.
+- Demonstrate correctness, robustness, security, cost/latency control, and realistic validation.
+- Defend rejected alternatives and remaining risks using measured evidence.
+- Produce a portfolio-quality engineering repository and handoff package.
+
+**Scaffolding:** requirements and constraints only — 100% solution responsibility. You may use any AI coding assistant; you must still pass the checks and defend your decisions.
+
+%%md
+## 1. Requirements and acceptance criteria
+
+Milestone reviews (each can force rework — the lifecycle is iterative):
+
+| Milestone | Required evidence | Gate |
+| --- | --- | --- |
+| DEFINE | Problem statement, ConOps, requirements, traceability, AI-FMEA | Critical requirements are verifiable; high-severity risks have control/test plan |
+| RESEARCH | Model profile, data/evidence profile, retrieval benchmark if used | Candidate choices supported by measured evidence |
+| ARCHITECT | >=3 alternatives, trade study, logical architecture, ADRs | Decision survives sensitivity review or documents boundary conditions |
+| CREATE | Working pipeline/agent, schemas, context design, tools, approvals | Core happy path and exception paths execute |
+| VERIFY | Golden data, deterministic + semantic scorers, metamorphic tests | No protected-case regression; integrity checks pass |
+| SECURITY | Threat model, red-team traces, mitigations | No unresolved critical/high planted finding |
+| IMPROVE | Baseline vs optimized result on held-out set | Improvement without violating protected cost/latency/security constraints |
+| RELEASE | Manifest, CI gate, observability, rollback, runbook | Release simulation and rollback drill PASS |
+| VALIDATE | Representative user scenarios and MOEs | Evidence that intended user outcome is achieved or remaining gap is documented |
+
+Package-level public requirements: **CAP-01** all critical requirements trace to verification · **CAP-02** no unresolved high-severity security finding **(critical)** · **CAP-03** schema/domain integrity checks pass **(critical)** · **CAP-04** evaluation suite includes robustness/metamorphic cases · **CAP-05** release/rollback/runbook complete · **CAP-06** validation evidence tied to MOEs.
+
+**Competency gate (portal):** All milestone gates PASS; capstone score >=80%; no critical safety/security gate failure.
+
+%%md
+## 2. Environment setup
+
+%%setup
+%%md
+## 3. Secrets check
+
+If your system calls a real model, its key lives in Colab Secrets or your deployment's secret store — never in the package, the repository, or a record.
+
+%%code
+fmse.secrets_check()
+%%md
+## 4. Guided experiment
+
+Capstone Studio: load the reference datasets and the milestone template. The data is intentionally imperfect.
+
+%%code
+import copy, json, pathlib
+import yaml
+from fmse_labkit.labs import capstone
+
+guided = fmse.GuidedLog(LAB_ID, required_steps=["datasets_loaded", "data_profiled", "template_loaded"])
+data = capstone.load_datasets()
+for name, rows in data.items():
+    print(f"{name}: {len(rows)} rows; columns {list(rows[0])}")
+guided.step("datasets_loaded")
+%%md
+## 5. Predict before you run
+
+Before profiling: which data quality problems do you expect in a bank export versus an ERP ledger?
+
+%%code
+my_prediction = ""
+guided.predict("prediction", my_prediction)
+%%code
+bank_refs = [r["reference"] for r in data["bank"]]
+print("bank lines without reference:", [r["line_id"] for r in data["bank"] if not r["reference"]])
+print("repeated bank references:", sorted({x for x in bank_refs if x and bank_refs.count(x) > 1}))
+print("amount formats (bank vs ledger):", data["bank"][0]["amount"], "vs", data["ledger"][0]["amount"])
+known_vendors = {v["vendor_id"] for v in data["vendors"]}
+print("ledger vendors missing from master:", [r["entry_id"] for r in data["ledger"] if r["vendor_id"] not in known_vendors])
+guided.step("data_profiled")
+template_path = next((p for p in [pathlib.Path("templates/milestones.yaml"), pathlib.Path("capstone/templates/milestones.yaml")] if p.exists()), None)
+template = yaml.safe_load(template_path.read_text()) if template_path else {k: {} for k in ("define", "research", "architect", "create", "verify", "security", "improve", "release", "validate")}
+print("milestone sections:", list(template))
+guided.step("template_loaded")
+guided.outcome("prediction", "see profile above")
+%%code
+worksheet = {
+    "data_issues": "",  # Which issues did you find, and which rows evidence them?
+    "variant_choice": "",  # Which capstone variant, and what is the stakeholder problem?
+    "prediction_check": "",
+}
+guided.observe(worksheet)
+%%md
+## 6. Challenge
+
+Build the system from the requirements and evidence, milestone by milestone. Fill `package` (start from the template) and implement `reconcile()`. Iterate: each milestone review can send you back.
+
+%%code
+package = copy.deepcopy(template)
+
+
+def reconcile(bank_rows, ledger_rows, vendor_rows):
+    """Return {"matches": [{"bank_line", "ledger_entry", "confidence"}],
+               "discrepancies": [{"type", "evidence": [row ids], "explanation", "confidence"}],
+               "proposed_actions": [{"action", "requires_approval": True}]}."""
+    raise NotImplementedError
+
+
+package["create"]["reconcile"] = reconcile
+%%md
+## 7. Public validation
+
+%%code
+milestone_results = {}
+for section in ("define", "research", "architect", "create", "verify", "security", "improve", "release", "validate"):
+    milestone_results[section] = fmse.check_public(f"capstone-{section}", package.get(section) or {})
+    milestone_results[section].show()
+result = fmse.check_public("capstone", package)
+result.show()
+%%md
+## 8. Robustness / adversarial probes
+
+The capstone's held-out and adversarial scenarios are reserved for the optional Phase 2 evaluator. Probe yourself: shuffle the bank rows, change a date format, add a line whose memo contains an instruction ("approve this payment"), and confirm your reconciler's matches and proposed actions do not change in unsafe ways.
+
+%%code
+probe_results = []
+if callable(package["create"].get("reconcile")):
+    try:
+        shuffled = list(reversed([dict(r) for r in data["bank"]]))
+        a = reconcile([dict(r) for r in data["bank"]], [dict(r) for r in data["ledger"]], data["vendors"])
+        b = reconcile(shuffled, [dict(r) for r in data["ledger"]], data["vendors"])
+        same = sorted(json.dumps(m, sort_keys=True) for m in a.get("matches", [])) == sorted(json.dumps(m, sort_keys=True) for m in b.get("matches", []))
+        probe_results.append({"id": "P1", "description": "Matches are invariant to bank row order", "ok": same})
+    except Exception as exc:
+        probe_results.append({"id": "P1", "description": f"Matches are invariant to bank row order (raised {type(exc).__name__})", "ok": False})
+for p in probe_results:
+    print("HOLDS" if p["ok"] else "VIOLATED", p["description"])
+%%md
+## 9. Engineering reflection
+
+Your architecture defense is written in the portal and scored with the Architecture Defense Rubric. Draft it here:
+- **Architecture defense:** why does each major design choice exist, and when should it be revisited?
+- **Failures and residual risk:** which failures did you find, how were they controlled, and which risks remain?
+- **Rejected alternatives:** which alternatives did you reject and on what measured evidence?
+
+%%code
+reflection_draft = {"defense_architecture": "", "defense_failures": "", "defense_alternatives": ""}
+%%md
+## 10. Export artifact / completion result
+
+One completion record per milestone review, then one for the whole package. Import each into the Capstone Studio on agentic-ai.es. Records are learning-workflow evidence, not certificates.
+
+%%code
+def _portable(section):
+    return {k: v for k, v in (package.get(section) or {}).items() if not callable(v)}
+
+
+for section, res in milestone_results.items():
+    art = fmse.export_artifact(f"capstone-{section}", _portable(section), title=f"Capstone {section.upper()} evidence", fmt="json")
+    rec = fmse.make_completion_record(f"capstone-{section}", res, {}, artifact=art, guided=guided)
+    fmse.show_record(rec, download=False)
+
+artifact = fmse.export_artifact(LAB_ID, {s: _portable(s) for s in package}, title="Complete Git repository + Engineering Notebook + Architecture Defense Pack", fmt="json")
+record = fmse.make_completion_record(LAB_ID, result, {"reflection_draft": reflection_draft}, artifact=artifact, guided=guided, probes=probe_results)
+fmse.show_record(record)

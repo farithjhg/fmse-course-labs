@@ -1,0 +1,150 @@
+#! lab_id: lab-15 output: labs/lab-15-production.ipynb
+%%md
+# FMSE Lab 15 - CI Gate Simulator
+
+**Course:** FMSE 2026 · **Module 15:** Production AI Engineering, CI/CD, and Observability · **Phase:** Release & Operate · **Tier:** Architect
+
+Course home and progress: [agentic-ai.es/academy/fmse/learn/m15-production-operations](https://agentic-ai.es/academy/fmse/learn/m15-production-operations).
+
+%%md
+## 0. Mission and competency target
+
+**Mission.** Build a release package with automated gates, observability schema, rollback criteria, and incident runbook.
+
+**Guided lab.** Students run an evaluation matrix against two releases and decide whether deployment should proceed.
+
+**Competency target (Module 15 outcomes):**
+- Design CI/CD gates for code, prompts, schemas, datasets, and evaluations.
+- Instrument traces, model/tool calls, latency, token/cost, cache behavior, errors, and outcome metrics.
+- Use canaries, rollback, model migration tests, and production-failure promotion.
+- Create a runbook and operating model with ownership and incident procedures.
+
+**Scaffolding:** about 10% guided, 90% independent. This is an **engineering challenge**: the guided part gives you a working reference path; the challenge does not.
+
+%%md
+## 1. Requirements and acceptance criteria
+
+Public validators check these requirements. They report which requirement failed and why — never the expected implementation.
+
+| ID | Requirement |
+| --- | --- |
+| REL-01 | Release manifest complete |
+| REL-02 | High-severity eval gate blocking **(critical)** |
+| REL-03 | Rollback criteria explicit |
+| REL-04 | Trace schema covers model/retrieval/tool events |
+| REL-05 | Cost and latency SLOs linked to requirements |
+| REL-06 | Release simulation PASS |
+
+**Competency gate (portal):** Release simulation PASS. Quiz >= 80%, the guided lab, the artifact and your reflection are also required. A critical requirement cannot be offset by other scores.
+
+%%md
+## 2. Environment setup
+
+%%setup
+%%md
+## 3. Secrets check
+
+This lab runs fully offline; no provider key is needed. Keys you use elsewhere belong in Colab Secrets and are never printed.
+
+%%code
+fmse.secrets_check()
+%%md
+## 4. Guided experiment
+
+An evaluation matrix for the current release and four candidates: per-case results with severities, plus quality, latency, cost and schema-failure metrics. `naive_gate` promotes whenever average quality does not drop.
+
+%%code
+from fmse_labkit.labs import lab15
+
+guided = fmse.GuidedLog(LAB_ID, required_steps=["matrix_inspected", "naive_gate_run"])
+print("current:", lab15.CURRENT["metrics"])
+for rid, cand in lab15.CANDIDATES.items():
+    failing = [c["id"] + "/" + c["severity"] for c in cand["cases"] if not c["passed"]]
+    print(rid, cand["metrics"], "failing:", failing)
+guided.step("matrix_inspected")
+%%md
+## 5. Predict before you run
+
+Which candidates will the naive gate promote, and which of those should not ship? Write your prediction, then run the experiment.
+
+%%code
+my_prediction = ""
+guided.predict("prediction", my_prediction)
+%%code
+for rid, cand in lab15.CANDIDATES.items():
+    print(rid, lab15.naive_gate(lab15.CURRENT, cand, {}))
+guided.step("naive_gate_run")
+guided.outcome("prediction", "see output above")
+%%md
+**Worksheet.** At least one full sentence per field; these observations are guided-lab evidence.
+
+%%code
+worksheet = {
+    "naive_gate_observation": "",
+    "matrix_observation": "",
+    "prediction_check": "",
+}
+guided.observe(worksheet)
+%%md
+## 6. Challenge
+
+**Release package with automated gates.** Build a release package with automated gates, observability schema, rollback criteria, and incident runbook.
+
+Constraints:
+- Protected (high/critical) case failures always block (critical).
+- SLO thresholds must cite NFR requirement ids.
+
+%%code
+manifest = {}  # see lab15.MANIFEST_KEYS
+policy = {"quality_tolerance": None, "protected_severities": [], "slo": {}}  # slo: metric -> {"max", "requirement"}
+
+
+def gate(current, candidate, policy):
+    """Return {"decision": "promote"|"block", "reasons": [...]}."""
+    raise NotImplementedError
+
+
+rollback = {"criteria": [], "should_rollback": lambda canary_metrics: False}
+trace_schema = {"events": {}}  # event type -> {"required": [fields]}; see lab15.TRACE_EVENTS
+runbook = {"owner": "", "kill_switch": "", "rollback_steps": [], "incident_steps": []}
+%%md
+## 7. Public validation
+
+%%code
+submission = {"manifest": manifest, "policy": policy, "gate": gate, "rollback": rollback, "trace_schema": trace_schema, "runbook": runbook}
+result = fmse.check_public(LAB_ID, submission)
+result.show()
+%%md
+## 8. Robustness / adversarial probes
+
+Extra adversarial conditions beyond the graded suite. They do not change your score; they show where your solution is brittle.
+
+%%code
+probe_results = fmse.probe(LAB_ID, submission)
+%%md
+## 9. Engineering reflection
+
+Graded in the portal and stored with your artifact. Draft it here if useful:
+- **Decision:** What does your gate block on, and how did you set the quality tolerance?
+- **Trade-offs:** Which rollback trigger might fire on noise, and how would you tune it?
+- **Remaining risks:** What production failure would your traces not let you reconstruct?
+
+%%code
+reflection_draft = {"decision": "", "tradeoffs": "", "remaining_risks": ""}
+%%md
+## 10. Export artifact / completion result
+
+Exports the **Production Runbook + CI/CD Gate + Observability Specification** artifact and prints a completion record. Paste the record into the Module 15 page on agentic-ai.es (**Import lab result**). The record is a learning-workflow document, not a signed certificate.
+
+%%code
+artifact = fmse.export_artifact(LAB_ID, {"manifest": manifest, "policy": policy, "rollback_criteria": rollback.get("criteria"), "trace_schema": trace_schema, "runbook": runbook,
+                            "release_decisions": result.evidence.get("decisions")}, title="Production Runbook + CI/CD Gate + Observability Specification", fmt="json")
+record = fmse.make_completion_record(
+    LAB_ID,
+    result,
+    {"reflection_draft": reflection_draft, **{}},
+    artifact=artifact,
+    guided=guided,
+    probes=probe_results,
+)
+fmse.show_record(record)

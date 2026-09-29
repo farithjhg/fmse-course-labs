@@ -1,0 +1,150 @@
+#! lab_id: lab-08 output: labs/lab-08-tool-contracts.ipynb
+%%md
+# FMSE Lab 08 - Typed Extraction and Tool Contract
+
+**Course:** FMSE 2026 · **Module 8:** Structured Interfaces and Tool Contracts · **Phase:** Create · **Tier:** Engineer
+
+Course home and progress: [agentic-ai.es/academy/fmse/learn/m08-structured-interfaces](https://agentic-ai.es/academy/fmse/learn/m08-structured-interfaces).
+
+%%md
+## 0. Mission and competency target
+
+**Mission.** Design a purchase-order tool contract that cannot exceed approved quantity/price bounds and cannot perform a write without explicit authorization evidence.
+
+**Guided lab.** Students start from a raw JSON prompt and migrate to schema-constrained output with deterministic validation.
+
+**Competency target (Module 8 outcomes):**
+- Distinguish valid JSON, schema-valid output, semantically correct output, and safe output.
+- Design typed tool/function contracts with clear descriptions, argument constraints, and error semantics.
+- Use provider-native structured output when available and understand grammar-constrained decoding for self-hosted inference.
+- Design bounded retries and deterministic validators without infinite "repair" loops.
+
+**Scaffolding:** about 25% guided, 75% independent. This is an **engineering challenge**: the guided part gives you a working reference path; the challenge does not.
+
+%%md
+## 1. Requirements and acceptance criteria
+
+Public validators check these requirements. They report which requirement failed and why — never the expected implementation.
+
+| ID | Requirement |
+| --- | --- |
+| TOOL-01 | Schema-valid output **(critical)** |
+| TOOL-02 | Domain validator catches semantic invalidity |
+| TOOL-03 | Tool mutability declared |
+| TOOL-04 | Authorization field required for writes **(critical)** |
+| TOOL-05 | Retry loop bounded |
+
+**Competency gate (portal):** 100% schema conformance on public adversarial set; semantic tests PASS. Quiz >= 80%, the guided lab, the artifact and your reflection are also required. A critical requirement cannot be offset by other scores.
+
+%%md
+## 2. Environment setup
+
+%%setup
+%%md
+## 3. Secrets check
+
+This lab runs fully offline; no provider key is needed. Keys you use elsewhere belong in Colab Secrets and are never printed.
+
+%%code
+fmse.secrets_check()
+%%md
+## 4. Guided experiment
+
+A scripted model returns raw text for a purchase-order request — sometimes fenced, malformed, wrongly typed or with extra fields. `raw_json_prompt_extract` is the starting point: ask for JSON and `json.loads` whatever comes back.
+
+%%code
+from fmse_labkit.labs import lab08
+import json
+
+guided = fmse.GuidedLog(LAB_ID, required_steps=["raw_json_observed", "schema_validation_observed"])
+print(json.dumps(lab08.PO_SCHEMA, indent=2))
+print("Approvals:", lab08.APPROVALS)
+%%md
+## 5. Predict before you run
+
+For each scripted output (clean, fenced_json, malformed, wrong types, extra field), will json.loads succeed, and will the result be correct? Write your prediction, then run the experiment.
+
+%%code
+my_prediction = ""
+guided.predict("prediction", my_prediction)
+%%code
+for name, outputs in lab08.EXTRACTION_CASES:
+    try:
+        data = lab08.raw_json_prompt_extract(lab08.ScriptedModel(outputs), "PO request")
+        print(f"{name:<24} parsed: {data}  schema errors: {fmse.schema.validate(data, lab08.PO_SCHEMA)}")
+    except Exception as exc:
+        print(f"{name:<24} raised {type(exc).__name__}")
+guided.step("raw_json_observed")
+guided.step("schema_validation_observed")
+guided.outcome("prediction", "see output above")
+%%md
+**Worksheet.** At least one full sentence per field; these observations are guided-lab evidence.
+
+%%code
+worksheet = {
+    "raw_json_failures": "",
+    "schema_effect": "",
+    "prediction_check": "",
+}
+guided.observe(worksheet)
+%%md
+## 6. Challenge
+
+**Purchase-order tool contract.** Design a purchase-order tool contract that cannot exceed approved quantity/price bounds and cannot perform a write without explicit authorization evidence.
+
+Constraints:
+- 100% schema conformance on the public adversarial set (critical).
+- Writes require authorization evidence the application can verify.
+
+%%code
+contracts = []  # {"name", "description", "mutability": "read"|"write", "idempotency", "parameters": JSON Schema, "errors": [...]}
+
+
+def validate_call(tool, args, context):
+    """Return {"status": "valid"|"retryable"|"escalate", "errors": [...]}; context["approvals"] holds approval records."""
+    raise NotImplementedError
+
+
+def structured_extract(model, text, schema, max_attempts=3):
+    """Return {"status": "valid"|"escalate", "data": ..., "attempts": n} - never schema-invalid data marked valid."""
+    raise NotImplementedError
+%%md
+## 7. Public validation
+
+%%code
+submission = {"contracts": contracts, "validate_call": validate_call, "structured_extract": structured_extract}
+result = fmse.check_public(LAB_ID, submission)
+result.show()
+%%md
+## 8. Robustness / adversarial probes
+
+Extra adversarial conditions beyond the graded suite. They do not change your score; they show where your solution is brittle.
+
+%%code
+probe_results = fmse.probe(LAB_ID, submission)
+%%md
+## 9. Engineering reflection
+
+Graded in the portal and stored with your artifact. Draft it here if useful:
+- **Decision:** Which checks did you put in the schema and which in the domain validator, and why?
+- **Trade-offs:** How many repair attempts did you allow, and what does each extra attempt cost?
+- **Remaining risks:** What could a schema-valid, authorized call still get wrong?
+
+%%code
+reflection_draft = {"decision": "", "tradeoffs": "", "remaining_risks": ""}
+%%md
+## 10. Export artifact / completion result
+
+Exports the **Interface Specification (JSON Schema/OpenAPI-like tool contracts)** artifact and prints a completion record. Paste the record into the Module 8 page on agentic-ai.es (**Import lab result**). The record is a learning-workflow document, not a signed certificate.
+
+%%code
+artifact = fmse.export_artifact(LAB_ID, {"contracts": contracts}, title="Interface Specification (JSON Schema/OpenAPI-like tool contracts)", fmt="json")
+record = fmse.make_completion_record(
+    LAB_ID,
+    result,
+    {"reflection_draft": reflection_draft, **{}},
+    artifact=artifact,
+    guided=guided,
+    probes=probe_results,
+)
+fmse.show_record(record)

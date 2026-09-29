@@ -1,0 +1,5 @@
+# fmse_labkit uses only the Python standard library.
+# Optional, for YAML submissions outside Colab (preinstalled in Colab):
+pyyaml
+# Optional, Module 14 real optimizer experiments:
+# dspy

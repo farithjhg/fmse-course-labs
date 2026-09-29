@@ -1,0 +1,164 @@
+#! lab_id: lab-00 output: labs/lab-00-task-framing.ipynb
+%%md
+# FMSE Lab 00 - Task Framing Laboratory
+
+**Course:** Foundation Model Systems Engineering (FMSE 2026) · **Module 0:** AI Power User Foundations · **Phase:** Foundation · **Tier:** Foundation
+
+This notebook is the lab runtime. Your course home, progress and Engineering Notebook live on
+[agentic-ai.es/academy/fmse/learn/m00-ai-power-user](https://agentic-ai.es/academy/fmse/learn/m00-ai-power-user).
+Work top to bottom; every section has a purpose.
+
+%%md
+## 0. Mission and competency target
+
+**Mission.** Show, with evidence, that framing a task (intent, evidence, constraints, success criteria, uncertainty handling, output interface) changes the quality of what a model produces — then write a one-page AI Task Brief for an ambiguous management request.
+
+**Competency target (Module 0 outcomes):**
+- Explain the practical difference between model knowledge, provided context, web/search grounding, and external tools.
+- Frame a task using intent, evidence, constraints, success criteria, and interface requirements.
+- Use iterative prompting, critiques, rubrics, examples, and multimodal inputs without over-prescribing capable reasoning models.
+- Recognize sycophancy, unsupported claims, missing evidence, and when human verification is required.
+
+**Scaffolding:** Foundation stage — about 70% guided, 30% independent. The guided experiment (sections 4-5) gives you a complete reference path; the challenge (section 6) does not.
+
+%%md
+## 1. Requirements and acceptance criteria
+
+Your AI Task Brief is checked by public validators. They are intentionally visible — they show you how the work is evaluated — and they report *which requirement* failed, never the expected text.
+
+| ID | Requirement |
+| --- | --- |
+| TB-01 | All required task-brief sections exist |
+| TB-02 | Success criteria are measurable or inspectable |
+| TB-03 | Evidence sources are distinguished from assumptions |
+| TB-04 | No instruction requests private/hidden reasoning |
+
+**Competency gate (portal):** Quiz >= 80%; artifact validator PASS; challenge reflection completed. The guided lab must also be completed (predictions and worksheet recorded).
+
+%%md
+## 2. Environment setup
+
+Loads the course lab kit (`fmse_labkit`). The cell is idempotent: re-running it is safe. It needs no API key.
+
+%%setup
+%%md
+## 3. Secrets check
+
+Every lab runs **offline** against a deterministic teaching simulator. If you want to repeat the guided experiment against a real model, add your own key in Colab **Secrets** (key icon, left sidebar) — `GEMINI_API_KEY`, `OPENAI_API_KEY` or `ANTHROPIC_API_KEY` — plus `FMSE_PROVIDER` and `FMSE_MODEL`. Never paste a key into a cell. This check reports presence only, never values.
+
+%%code
+fmse.secrets_check()
+%%md
+## 4. Guided experiment
+
+Two briefs for the same request are run against the lab model:
+
+- a **weak** brief — one sentence, no evidence, no criteria;
+- a **strong** brief — intent, evidence plan (sources vs assumptions), constraints, success criteria, uncertainty handling, output interface.
+
+The simulator (used unless you configured a real provider) is **not a language model**. It fills whatever the brief leaves open with a plausible default — which is exactly how under-specified briefs produce confident, unverifiable output. Its rules are documented in `fmse_labkit/labs/lab00.py`.
+
+%%code
+from fmse_labkit.labs import lab00
+
+guided = fmse.GuidedLog(LAB_ID, required_steps=["run_weak_brief", "run_strong_brief", "compare_outputs"])
+model = fmse.model.get_model(lab00.simulated_brief_response)
+
+print("REQUEST:", lab00.MANAGEMENT_REQUEST, "\n")
+print("WEAK BRIEF:\n", lab00.WEAK_BRIEF, "\n")
+print("STRONG BRIEF:\n", lab00.STRONG_BRIEF)
+%%md
+## 5. Predict before you run
+
+Before running the next cell, write down what you expect. Which brief will satisfy more of the acceptance checklist below, and which specific item do you expect the weak brief to fail?
+
+Acceptance checklist: *every figure cites a source · states uncertainty · follows the requested structure · focused (at most 3 drivers)*.
+
+%%code
+# Replace the empty string with your prediction, then run this cell.
+my_prediction = ""
+guided.predict("weak_vs_strong", my_prediction)
+%%code
+weak = model.complete(lab00.WEAK_BRIEF)
+guided.step("run_weak_brief")
+strong = model.complete(lab00.STRONG_BRIEF)
+guided.step("run_strong_brief")
+
+for label, response in (("WEAK", weak), ("STRONG", strong)):
+    print(f"--- {label} brief output ({response.provider}, {response.input_tokens} in / {response.output_tokens} out tokens, {response.latency_ms} ms)")
+    print(response.text, "\n")
+
+comparison = {"weak": lab00.evaluate_output(weak.text), "strong": lab00.evaluate_output(strong.text)}
+for item in comparison["weak"]:
+    w = "met" if comparison["weak"][item] else "NOT met"
+    s = "met" if comparison["strong"][item] else "NOT met"
+    print(f"{item:<35} weak: {w:<8} strong: {s}")
+guided.step("compare_outputs")
+guided.outcome("weak_vs_strong", comparison)
+%%md
+**Worksheet.** Record what you observed. At least one full sentence per field — these observations are part of your guided-lab evidence.
+
+%%code
+worksheet = {
+    "difference_observed": "",  # What changed between the two outputs, concretely?
+    "unsupported_claims": "",  # Which claims in the weak output could not be verified, and why?
+    "prediction_check": "",  # Was your prediction right? What did you miss?
+}
+guided.observe(worksheet)
+%%md
+## 6. Challenge
+
+**Engineering / design challenge.** Given the ambiguous management request below, produce a one-page **AI Task Brief** with intent, evidence plan, constraints, success criteria, uncertainty handling, and output interface.
+
+No prompt template is supplied — and copying the strong brief from section 4 will not help you: it was written for a different decision. Write the brief in **Markdown** (one `##` heading per section) or **YAML** (one key per section).
+
+%%code
+print(lab00.MANAGEMENT_REQUEST)
+%%code
+my_brief = """
+"""
+%%md
+## 7. Public validation
+
+Run the public validators. Feedback names the requirement and the reason; hints are conceptual. Revise and re-run as often as you need.
+
+%%code
+result = fmse.check_public(LAB_ID, my_brief)
+result.show()
+%%md
+## 8. Robustness / adversarial probes
+
+A good validator must catch degraded versions of your brief. The probes perturb your brief (remove the evidence plan, make criteria vague, add a request for hidden reasoning) and confirm each change is caught. Then run your brief through the model and apply the same acceptance checklist.
+
+%%code
+probe_results = fmse.probe(LAB_ID, my_brief)
+if my_brief.strip():
+    challenge_output = model.complete(my_brief)
+    print("\nModel output for your brief:\n", challenge_output.text)
+%%md
+## 9. Engineering reflection
+
+Your graded reflection is written in the portal (it is stored with your artifact in the Engineering Notebook). Draft it here if you like — the draft travels in the completion record so the portal can pre-fill it.
+
+- **Decision:** what did you decide to put in the brief, and why is that the right framing for this request?
+- **Trade-offs:** what did you leave out or constrain, and what did that cost?
+- **Remaining risks:** where could the output still be wrong, and when is human verification required?
+
+%%code
+reflection_draft = {"decision": "", "tradeoffs": "", "remaining_risks": ""}
+%%md
+## 10. Export artifact / completion result
+
+Exports your brief as the **AI Task Brief** artifact and prints a completion record. Copy the record (between the markers) and paste it into the portal: **Import lab result** on the Module 0 page. The record is a learning-workflow document, not a signed certificate.
+
+%%code
+artifact = fmse.export_artifact(LAB_ID, my_brief, title="AI Task Brief", fmt="markdown" if my_brief.lstrip().startswith("#") else "yaml")
+record = fmse.make_completion_record(
+    LAB_ID,
+    result,
+    {"reflection_draft": reflection_draft, "guided_comparison": comparison},
+    artifact=artifact,
+    guided=guided,
+    probes=probe_results,
+)
+fmse.show_record(record)

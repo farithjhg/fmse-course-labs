@@ -1,0 +1,150 @@
+#! lab_id: lab-04 output: labs/lab-04-model-profiler.ipynb
+%%md
+# FMSE Lab 04 - Model Profiler
+
+**Course:** FMSE 2026 · **Module 4:** Foundation Model Mechanics and Inference Economics · **Phase:** Research · **Tier:** Practitioner
+
+Course home and progress: [agentic-ai.es/academy/fmse/learn/m04-model-mechanics](https://agentic-ai.es/academy/fmse/learn/m04-model-mechanics).
+
+%%md
+## 0. Mission and competency target
+
+**Mission.** Design and run a mini benchmark on 20 tasks. Produce a recommendation conditioned on requirements rather than a universal "best model."
+
+**Guided lab.** A provider-neutral wrapper captures latency, token counts, success metrics, and cost estimates.
+
+**Competency target (Module 4 outcomes):**
+- Explain tokenization, context windows, prefill, decode, reasoning tokens/effort, and common sources of latency.
+- Profile quality-latency-cost trade-offs across model configurations.
+- Recognize when examples or procedural instructions help and when they over-constrain reasoning.
+- Create a model characterization report rather than selecting a model from reputation alone.
+
+**Scaffolding:** about 50% guided, 50% independent. This is an **engineering challenge**: the guided part gives you a working reference path; the challenge does not.
+
+%%md
+## 1. Requirements and acceptance criteria
+
+Public validators check these requirements. They report which requirement failed and why — never the expected implementation.
+
+| ID | Requirement |
+| --- | --- |
+| PRF-01 | Benchmark contains >=20 samples |
+| PRF-02 | At least 2 model/config variants compared |
+| PRF-03 | Quality metric defined |
+| PRF-04 | Latency and cost captured |
+| PRF-05 | Conclusion cites measured evidence and limitations |
+| PRF-06 | Benchmark reproducible |
+
+**Competency gate (portal):** Benchmark reproducible; report PASS. Quiz >= 80%, the guided lab, the artifact and your reflection are also required. A critical requirement cannot be offset by other scores.
+
+%%md
+## 2. Environment setup
+
+%%setup
+%%md
+## 3. Secrets check
+
+This lab runs fully offline; no provider key is needed. Keys you use elsewhere belong in Colab Secrets and are never printed.
+
+%%code
+fmse.secrets_check()
+%%md
+## 4. Guided experiment
+
+`lab04.run_variant` is a provider-neutral profiler wrapper: for each task it records correctness, input/output/reasoning tokens, time to first token, total latency and cost. The simulated models have documented, deterministic behaviour; unit costs are hypothetical numbers you choose.
+
+%%code
+from fmse_labkit.labs import lab04
+import statistics
+
+guided = fmse.GuidedLog(LAB_ID, required_steps=["profile_short_vs_long", "compare_variants"])
+tasks = lab04.task_pool()
+unit_costs = {"sim-fast": 0.0004, "sim-reasoning": 0.004, "sim-small": 0.0001}  # hypothetical, per 1K tokens
+print(len(tasks), "tasks;", sum(t["long_context"] for t in tasks), "are long-context")
+print("Scenario:", lab04.SCENARIO)
+%%md
+## 5. Predict before you run
+
+For the same short answer, how will TTFT differ between a short prompt and a long-context prompt? Which variant will be slowest, and why? Write your prediction, then run the experiment.
+
+%%code
+my_prediction = ""
+guided.predict("prediction", my_prediction)
+%%code
+fast = {"name": "fast", "model": "sim-fast", "effort": "low", "prompt_style": "objective"}
+for t in (tasks[1], tasks[0]):
+    r = lab04.run_variant(fast, t, unit_costs)
+    print(f"{t['id']} long_context={t['long_context']}: TTFT {r['ttft_ms']} ms, total {r['latency_ms']} ms, in {r['input_tokens']} tok")
+guided.step("profile_short_vs_long")
+ids = [t["id"] for t in tasks[:12]]
+for v in (fast, {"name": "reasoning", "model": "sim-reasoning", "effort": "high", "prompt_style": "objective"}):
+    print(v["name"], lab04.summarize(lab04.profile(v, ids, unit_costs)))
+guided.step("compare_variants")
+guided.outcome("prediction", "see output above")
+%%md
+**Worksheet.** At least one full sentence per field; these observations are guided-lab evidence.
+
+%%code
+worksheet = {
+    "prefill_observation": "",
+    "tradeoff_observation": "",
+    "prediction_check": "",
+}
+guided.observe(worksheet)
+%%md
+## 6. Challenge
+
+**Mini benchmark and characterization report.** Design and run a mini benchmark on 20 tasks. Produce a recommendation conditioned on requirements rather than a universal "best model."
+
+Constraints:
+- Unit costs are hypothetical inputs you choose; never hard-code real prices.
+- The recommendation must cite scenario requirement ids.
+
+%%code
+my_benchmark = {
+    "benchmark": {"task_ids": [], "quality_metric": {"name": "", "definition": ""}},
+    "variants": [],  # {"name", "model", "effort", "prompt_style"}
+    "unit_costs": unit_costs,
+    "results": {},  # variant name -> lab04.summarize(lab04.profile(variant, task_ids, unit_costs))
+    "conclusion": {"recommendation": "", "evidence": "", "limitations": ""},
+}
+%%md
+## 7. Public validation
+
+%%code
+submission = my_benchmark
+result = fmse.check_public(LAB_ID, submission)
+result.show()
+%%md
+## 8. Robustness / adversarial probes
+
+Extra adversarial conditions beyond the graded suite. They do not change your score; they show where your solution is brittle.
+
+%%code
+probe_results = fmse.probe(LAB_ID, submission)
+%%md
+## 9. Engineering reflection
+
+Graded in the portal and stored with your artifact. Draft it here if useful:
+- **Decision:** Which variant do you recommend for which requirement, and what measured evidence supports it?
+- **Trade-offs:** What does the recommended variant give up (quality, latency or cost), and why is that acceptable here?
+- **Remaining risks:** What could make this benchmark misleading on real traffic?
+
+%%code
+reflection_draft = {"decision": "", "tradeoffs": "", "remaining_risks": ""}
+%%md
+## 10. Export artifact / completion result
+
+Exports the **Foundation Model Characterization Report** artifact and prints a completion record. Paste the record into the Module 4 page on agentic-ai.es (**Import lab result**). The record is a learning-workflow document, not a signed certificate.
+
+%%code
+artifact = fmse.export_artifact(LAB_ID, my_benchmark, title="Foundation Model Characterization Report", fmt="json")
+record = fmse.make_completion_record(
+    LAB_ID,
+    result,
+    {"reflection_draft": reflection_draft, **{}},
+    artifact=artifact,
+    guided=guided,
+    probes=probe_results,
+)
+fmse.show_record(record)

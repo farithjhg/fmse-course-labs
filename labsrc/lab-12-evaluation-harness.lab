@@ -1,0 +1,150 @@
+#! lab_id: lab-12 output: labs/lab-12-evaluation-harness.ipynb
+%%md
+# FMSE Lab 12 - Evaluation Harness
+
+**Course:** FMSE 2026 · **Module 12:** Evaluation Engineering and Verification/Validation · **Phase:** Verify & Validate · **Tier:** Senior
+
+Course home and progress: [agentic-ai.es/academy/fmse/learn/m12-evaluation-vv](https://agentic-ai.es/academy/fmse/learn/m12-evaluation-vv).
+
+%%md
+## 0. Mission and competency target
+
+**Mission.** Create an evaluation suite that detects at least 90% of planted faults across correctness, robustness, schema, and injection-resilience categories.
+
+**Guided lab.** Students build scorers over a provided claims-extraction system and then add metamorphic transformations.
+
+**Competency target (Module 12 outcomes):**
+- Design golden datasets from requirements and real failure modes.
+- Build deterministic, semantic, model-graded, and custom scorers with calibrated use.
+- Use metamorphic testing to reveal brittleness without requiring one exact output.
+- Distinguish verification (meets specified requirements) from validation (meets stakeholder intent in realistic use).
+
+**Scaffolding:** about 25% guided, 75% independent. This is an **engineering challenge**: the guided part gives you a working reference path; the challenge does not.
+
+%%md
+## 1. Requirements and acceptance criteria
+
+Public validators check these requirements. They report which requirement failed and why — never the expected implementation.
+
+| ID | Requirement |
+| --- | --- |
+| EVL-01 | Golden set categorized |
+| EVL-02 | At least 3 scorer types |
+| EVL-03 | Metamorphic transformations implemented |
+| EVL-04 | Verification traceability present |
+| EVL-05 | Validation scenario defined |
+| EVL-06 | Fault-detection target met **(critical)** |
+
+**Competency gate (portal):** Fault-detection target met; no high-severity regression. Quiz >= 80%, the guided lab, the artifact and your reflection are also required. A critical requirement cannot be offset by other scores.
+
+%%md
+## 2. Environment setup
+
+%%setup
+%%md
+## 3. Secrets check
+
+This lab runs fully offline; no provider key is needed. Keys you use elsewhere belong in Colab Secrets and are never printed.
+
+%%code
+fmse.secrets_check()
+%%md
+## 4. Guided experiment
+
+A correct claims-extraction system (`reference_system`) and its contract. Build scorers against it, then check that simple transformations leave the correct output unchanged.
+
+%%code
+from fmse_labkit.labs import lab12
+
+guided = fmse.GuidedLog(LAB_ID, required_steps=["scorers_built", "metamorphic_checked"])
+for email in lab12.SAMPLE_EMAILS:
+    print(repr(email[:60]), "->", lab12.reference_system(email))
+print("Requirements:", lab12.CLAIM_REQUIREMENTS)
+%%md
+## 5. Predict before you run
+
+Will an exact-match scorer and a schema scorer agree on an output whose amount is the string '1250.50'? Write your prediction, then run the experiment.
+
+%%code
+my_prediction = ""
+guided.predict("prediction", my_prediction)
+%%code
+out = lab12.reference_system(lab12.SAMPLE_EMAILS[0])
+stringy = [{**c, "amount": f"{c['amount']:.2f}"} for c in out]
+print("exact match:", stringy == out, "| schema errors:", fmse.schema.validate(stringy[0], lab12.CLAIM_SCHEMA))
+guided.step("scorers_built")
+reordered = "\n".join(reversed(lab12.SAMPLE_EMAILS[0].splitlines()))
+print("invariant under reordering:", lab12.reference_system(reordered) == out)
+guided.step("metamorphic_checked")
+guided.outcome("prediction", "see output above")
+%%md
+**Worksheet.** At least one full sentence per field; these observations are guided-lab evidence.
+
+%%code
+worksheet = {
+    "scorer_disagreement": "",
+    "metamorphic_value": "",
+    "prediction_check": "",
+}
+guided.observe(worksheet)
+%%md
+## 6. Challenge
+
+**Fault-detecting evaluation suite.** Create an evaluation suite that detects at least 90% of planted faults across correctness, robustness, schema, and injection-resilience categories.
+
+Constraints:
+- No false alarm on the correct system.
+- Fault detection >= 90% of planted mutants (critical).
+
+%%code
+golden_set = []  # {"id", "input", "expected", "category" (lab12.CATEGORIES), "severity"}
+scorers = []  # {"name", "type" (lab12.SCORER_TYPES), "fn": fn(expected, actual) -> bool}
+transforms = []  # {"name", "fn": fn(text) -> text}  (must not change the correct extraction)
+traceability = {}  # requirement id -> [golden ids]
+validation_scenarios = []  # {"moe", "scenario", "users", "measure"}
+
+
+def run_suite(system):
+    """Run your suite against a system(text) -> claims. Return {"passed": bool, "failures": [...]}."""
+    raise NotImplementedError
+%%md
+## 7. Public validation
+
+%%code
+submission = {"golden_set": golden_set, "scorers": scorers, "transforms": transforms, "traceability": traceability, "validation_scenarios": validation_scenarios, "run_suite": run_suite}
+result = fmse.check_public(LAB_ID, submission)
+result.show()
+%%md
+## 8. Robustness / adversarial probes
+
+Extra adversarial conditions beyond the graded suite. They do not change your score; they show where your solution is brittle.
+
+%%code
+probe_results = fmse.probe(LAB_ID, submission)
+%%md
+## 9. Engineering reflection
+
+Graded in the portal and stored with your artifact. Draft it here if useful:
+- **Decision:** Which part of your suite caught the most mutants, and why that part?
+- **Trade-offs:** What does your suite cost to run, and which checks would you drop under a time budget?
+- **Remaining risks:** What kind of fault would your suite still miss?
+
+%%code
+reflection_draft = {"decision": "", "tradeoffs": "", "remaining_risks": ""}
+%%md
+## 10. Export artifact / completion result
+
+Exports the **Evaluation Plan + Golden Dataset + Test Harness** artifact and prints a completion record. Paste the record into the Module 12 page on agentic-ai.es (**Import lab result**). The record is a learning-workflow document, not a signed certificate.
+
+%%code
+artifact = fmse.export_artifact(LAB_ID, {"golden_set": golden_set, "scorers": [s.get("name") for s in scorers], "transforms": [t.get("name") for t in transforms],
+                            "traceability": traceability, "validation_scenarios": validation_scenarios}, title="Evaluation Plan + Golden Dataset + Test Harness", fmt="json")
+record = fmse.make_completion_record(
+    LAB_ID,
+    result,
+    {"reflection_draft": reflection_draft, **{}},
+    artifact=artifact,
+    guided=guided,
+    probes=probe_results,
+)
+fmse.show_record(record)

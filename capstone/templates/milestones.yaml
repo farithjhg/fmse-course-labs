@@ -1,0 +1,58 @@
+# FMSE Capstone - milestone evidence template.
+# Fill one section per EDP milestone review. Each section is validated with
+#   fmse.check_public("capstone-<section>", package["<section>"])
+# and the whole package with fmse.check_public("capstone", package).
+# Keep large code and data in your Git repository; reference it here.
+
+define:
+  problem_statement: ""
+  conops:
+    stakeholders: []        # {group, interest}
+    scenarios: []           # {id, type: nominal|exception|degraded, title, observable_outcome}
+    moes: []                # {id, name, metric, target, validation_condition}
+  requirements: []          # {id, statement ("shall"), verification_method, critical: true|false}
+  traceability: {}          # requirement id -> [test ids or verification methods]
+  fmea: []                  # {id, failure_mode, severity, occurrence, detection, rpn, mitigations, verification}
+
+research:
+  model_profile: []         # {name, quality, p50_latency_ms, cost_per_task}
+  selection_rationale: ""
+  data_profile: []          # {issue, rows: [row ids from the reference datasets]}
+
+architect:
+  alternatives: []          # {id, name, pattern, description}
+  criteria: []              # {id, weight, requirements: [...]}
+  sensitivity: []           # {criterion, delta, winner}
+  decision: {selected: ""}
+  boundary_conditions: ""
+  adrs: []                  # {context, decision, alternatives, consequences, revisit_triggers}
+
+create:
+  repository: ""            # link to your repository (the reconcile() function is attached in the notebook)
+
+verify:
+  golden_set: []            # {id, category, severity}
+  scorers: []               # {name, type}
+  metamorphic: []           # {name}
+  latest_run: {failed_case_ids: []}
+
+security:
+  threats: []               # {asset, trust_boundary, control, test}
+  findings: []              # {id, severity, status: resolved|accepted|open}
+
+improve:
+  baseline: {heldout_score: null}
+  optimized: {heldout_score: null, cost_per_task: null, p95_latency_ms: null, protected_failures: null}
+  heldout_used_for_tuning: true
+  constraints: {cost_per_task: null, p95_latency_ms: null}
+
+release:
+  manifest: {}              # code_version, prompt_versions, tool_schema_versions, model, dataset_version, eval_suite_version
+  ci_gate: {blocks_on_protected_regression: false}
+  trace_schema: {events: []}
+  rollback: {criteria: [], drill_passed: false}
+  runbook: {owner: "", kill_switch: "", rollback_steps: []}
+
+validate:
+  scenarios: []             # {moe, users, result, achieved, gap_plan}
+  residual_risks: []

@@ -1,0 +1,147 @@
+#! lab_id: lab-09 output: labs/lab-09-context-budget.ipynb
+%%md
+# FMSE Lab 09 - Context Budget Optimizer
+
+**Course:** FMSE 2026 · **Module 9:** Context Engineering, Memory, and Caching · **Phase:** Create · **Tier:** Senior
+
+Course home and progress: [agentic-ai.es/academy/fmse/learn/m09-context-engineering](https://agentic-ai.es/academy/fmse/learn/m09-context-engineering).
+
+%%md
+## 0. Mission and competency target
+
+**Mission.** Refactor a long-running agent trace to preserve decisions and tool state while reducing context by >=40% with no regression on a verification set.
+
+**Guided lab.** Students observe degradation from noisy context, then implement a context selector/compactor.
+
+**Competency target (Module 9 outcomes):**
+- Design context assembly as a pipeline: select, order, compress, persist, reuse.
+- Distinguish conversation history, working state, durable memory, retrieved evidence, and application state.
+- Preserve stable prefixes/tool ordering where prompt caching materially improves latency/cost.
+- Measure context quality and cache effectiveness rather than maximizing context length.
+
+**Scaffolding:** about 25% guided, 75% independent. This is an **engineering challenge**: the guided part gives you a working reference path; the challenge does not.
+
+%%md
+## 1. Requirements and acceptance criteria
+
+Public validators check these requirements. They report which requirement failed and why — never the expected implementation.
+
+| ID | Requirement |
+| --- | --- |
+| CTX-01 | Required facts preserved |
+| CTX-02 | Stale/irrelevant context removed |
+| CTX-03 | Stable vs dynamic context separated |
+| CTX-04 | Context budget respected **(critical)** |
+| CTX-05 | Memory/state ownership documented |
+
+**Competency gate (portal):** Quality regression <= defined module threshold; context reduction target met. Quiz >= 80%, the guided lab, the artifact and your reflection are also required. A critical requirement cannot be offset by other scores.
+
+%%md
+## 2. Environment setup
+
+%%setup
+%%md
+## 3. Secrets check
+
+This lab runs fully offline; no provider key is needed. Keys you use elsewhere belong in Colab Secrets and are never printed.
+
+%%code
+fmse.secrets_check()
+%%md
+## 4. Guided experiment
+
+A 70-event incident thread: system instructions and tool definitions, decisions, constraints, open questions, tool-state handles — buried in superseded metric snapshots and chatter. `FACTS` is the verification set that must survive compaction.
+
+%%code
+from fmse_labkit.labs import lab09
+from fmse_labkit.model import approx_tokens
+
+guided = fmse.GuidedLog(LAB_ID, required_steps=["full_replay_measured", "facts_located"])
+trace = lab09.build_trace()
+print(len(trace), "events; budget", lab09.BUDGET_TOKENS, "tokens")
+%%md
+## 5. Predict before you run
+
+How many tokens will full replay cost, and what share of them are decisions versus noise? Write your prediction, then run the experiment.
+
+%%code
+my_prediction = ""
+guided.predict("prediction", my_prediction)
+%%code
+full = lab09.naive_context(trace)
+print("full replay:", approx_tokens(full), "tokens")
+guided.step("full_replay_measured")
+for fid, text in lab09.FACTS.items():
+    where = next(e["id"] for e in trace if fid in e["text"])
+    print(fid, "->", where, ":", text)
+guided.step("facts_located")
+guided.outcome("prediction", "see output above")
+%%md
+**Worksheet.** At least one full sentence per field; these observations are guided-lab evidence.
+
+%%code
+worksheet = {
+    "noise_observation": "",
+    "selection_observation": "",
+    "prediction_check": "",
+}
+guided.observe(worksheet)
+%%md
+## 6. Challenge
+
+**Compact a long-running agent trace.** Refactor a long-running agent trace to preserve decisions and tool state while reducing context by >=40% with no regression on a verification set.
+
+Constraints:
+- Budget: 450 tokens; reduction >= 40% (critical).
+- Stable prefix (system + tools) separate from dynamic context.
+
+%%code
+def compact(trace, budget_tokens):
+    """Return {"stable": system+tools prefix, "dynamic": everything that changes, "over_budget": bool}."""
+    raise NotImplementedError
+
+
+memory_policy = {
+    # one entry per state type in lab09.MEMORY_TYPES: {"owner", "retention", "deletion"} - and a rule about secrets
+}
+%%md
+## 7. Public validation
+
+%%code
+submission = {"compact": compact, "memory_policy": memory_policy}
+result = fmse.check_public(LAB_ID, submission)
+result.show()
+%%md
+## 8. Robustness / adversarial probes
+
+Extra adversarial conditions beyond the graded suite. They do not change your score; they show where your solution is brittle.
+
+%%code
+probe_results = fmse.probe(LAB_ID, submission)
+%%md
+## 9. Engineering reflection
+
+Graded in the portal and stored with your artifact. Draft it here if useful:
+- **Decision:** What did your compactor keep, drop and summarize, and how did you decide?
+- **Trade-offs:** What information did you knowingly lose to meet the budget?
+- **Remaining risks:** What kind of fact could a future trace contain that your policy would drop?
+
+%%code
+reflection_draft = {"decision": "", "tradeoffs": "", "remaining_risks": ""}
+%%md
+## 10. Export artifact / completion result
+
+Exports the **Context Architecture Specification + Compaction Policy** artifact and prints a completion record. Paste the record into the Module 9 page on agentic-ai.es (**Import lab result**). The record is a learning-workflow document, not a signed certificate.
+
+%%code
+artifact = fmse.export_artifact(LAB_ID, {"compaction": {k: result.evidence.get(k) for k in ("raw_tokens", "compacted_tokens", "reduction")}, "memory_policy": memory_policy},
+                     title="Context Architecture Specification + Compaction Policy", fmt="json")
+record = fmse.make_completion_record(
+    LAB_ID,
+    result,
+    {"reflection_draft": reflection_draft, **{}},
+    artifact=artifact,
+    guided=guided,
+    probes=probe_results,
+)
+fmse.show_record(record)

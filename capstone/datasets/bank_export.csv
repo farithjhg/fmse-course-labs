@@ -1,0 +1,13 @@
+line_id,booking_date,amount,currency,counterparty,reference
+B01,01/09/2026,"1.452,00",EUR,Norte Logistics S.L.,INV-2026-0141
+B02,02/09/2026,"3.000,00",EUR,Blue Harbor Ltd,INV-88-311
+B03,03/09/2026,"552,00",EUR,Kappa Systems GmbH,INV-7781
+B04,04/09/2026,"420,00",EUR,Delta Office Supply,INV-3310
+B05,04/09/2026,"420,00",EUR,Delta Office Supply,INV-3310
+B06,07/09/2026,"2.420,00",EUR,Sigma Cloud BV,INV-9002
+B07,08/09/2026,"165,00",EUR,Rho Catering,
+B08,09/09/2026,"99,90",EUR,Omega Print,INV-12-9
+B09,10/09/2026,"1.250,00",EUR,Iberia Parts SA,INV-55-120
+B10,11/09/2026,"780,00",EUR,Lambda Security,INV-6604
+B11,12/09/2026,"9.999,00",EUR,Unknown Transfer Co,REF-XX-01
+B12,15/09/2026,"310,40",EUR,Tau Ltd,INV-1

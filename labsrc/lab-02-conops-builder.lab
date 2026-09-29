@@ -1,0 +1,156 @@
+#! lab_id: lab-02 output: labs/lab-02-conops-builder.ipynb
+%%md
+# FMSE Lab 02 - ConOps Builder
+
+**Course:** FMSE 2026 · **Module 2:** Problem Formulation and Concept of Operations · **Phase:** Define · **Tier:** Practitioner
+
+Course home and progress: [agentic-ai.es/academy/fmse/learn/m02-problem-conops](https://agentic-ai.es/academy/fmse/learn/m02-problem-conops).
+
+%%md
+## 0. Mission and competency target
+
+**Mission.** Stop translating a solution-shaped request straight into a prompt. Turn it into a bounded problem, a stakeholder map, operational scenarios (nominal, exception, degraded), measures of effectiveness and explicit non-goals — before any model or architecture is chosen.
+
+**Competency target (Module 2 outcomes):**
+- Convert an ambiguous business request into a bounded engineering problem statement.
+- Create a lightweight Concept of Operations (ConOps) with actors, scenarios, environment, and exception paths.
+- Distinguish stakeholder needs, desired outcomes, constraints, and proposed solutions.
+- Define measures of effectiveness that can later be validated in realistic use.
+
+**Scaffolding:** Practitioner — about 50% guided, 50% independent. This is a **design challenge**: there is no single correct ConOps; structure is checked here, and your design defense is written in the portal.
+
+%%md
+## 1. Requirements and acceptance criteria
+
+| ID | Requirement |
+| --- | --- |
+| CON-01 | Problem statement does not prescribe a solution |
+| CON-02 | At least 3 stakeholder groups |
+| CON-03 | Nominal + exception + degraded scenario included |
+| CON-04 | At least 3 measurable MOEs |
+| CON-05 | Non-goals explicitly stated |
+
+**Competency gate (portal):** Artifact PASS; design defense asks why an agent is or is not necessary. Quiz >= 80% and the guided lab are also required.
+
+**ConOps structure used by the validators** (a dict, YAML or Markdown with these sections):
+`problem_statement`, `system_boundary`, `stakeholders` (each with a `group`), `assumptions`, `scenarios` (each with `type` = nominal / exception / degraded and an `observable_outcome`), `moes` (each with `metric`, `target`, `validation_condition`), `non_goals`.
+
+%%md
+## 2. Environment setup
+
+%%setup
+%%md
+## 3. Secrets check
+
+No provider key is used in this lab — a ConOps is written before any model is selected.
+
+%%code
+fmse.secrets_check()
+%%md
+## 4. Guided experiment
+
+A provided scenario from a different domain — IT service-desk triage — with a partly completed ConOps. You will complete the structured cells until it validates.
+
+%%code
+import copy, json
+from fmse_labkit.labs import lab02
+
+guided = fmse.GuidedLog(LAB_ID, required_steps=["validate_starter", "complete_guided_conops", "guided_conops_passes"])
+print("SCENARIO:", lab02.GUIDED_SCENARIO, "\n")
+guided_conops = copy.deepcopy(lab02.GUIDED_CONOPS_STARTER)
+print(json.dumps(guided_conops, indent=2))
+%%md
+## 5. Predict before you run
+
+Which of CON-01 ... CON-05 will the starter ConOps fail? Write your prediction, then run the validators on it.
+
+%%code
+my_prediction = ""
+guided.predict("starter_failures", my_prediction)
+%%code
+starter_result = fmse.check_public(LAB_ID, guided_conops)
+starter_result.show()
+guided.step("validate_starter")
+guided.outcome("starter_failures", starter_result.failed_requirements)
+%%md
+Now complete the guided ConOps in the cell below: a problem statement that does not prescribe a solution, a third stakeholder group, the missing scenario types, two more measurable MOEs, and at least one non-goal. Re-run until it passes.
+
+%%code
+guided_problem_statement = ""
+extra_stakeholders = []  # add at least one more group, e.g. {"group": ..., "interest": ...}
+extra_scenarios = []  # add an exception and a degraded scenario (type, title, observable_outcome)
+extra_moes = []  # add two more MOEs (metric, target, validation_condition)
+guided_non_goals = []
+
+guided_conops["problem_statement"] = guided_problem_statement
+guided_conops["stakeholders"] = lab02.GUIDED_CONOPS_STARTER["stakeholders"] + extra_stakeholders
+guided_conops["scenarios"] = lab02.GUIDED_CONOPS_STARTER["scenarios"] + extra_scenarios
+guided_conops["moes"] = lab02.GUIDED_CONOPS_STARTER["moes"] + extra_moes
+guided_conops["non_goals"] = guided_non_goals
+guided.step("complete_guided_conops")
+
+guided_result = fmse.check_public(LAB_ID, guided_conops)
+guided_result.show()
+if guided_result.passed:
+    guided.step("guided_conops_passes")
+%%code
+worksheet = {
+    "solution_bias": "",  # Where did the original request presuppose a solution?
+    "degraded_vs_exception": "",  # How is your degraded scenario different from your exception scenario?
+    "prediction_check": "",
+}
+guided.observe(worksheet)
+%%md
+## 6. Challenge
+
+> A CFO says: *"I want an AI agent that reconciles bank statements against Excel and tells us what is wrong."*
+
+Produce the **problem statement, system boundary, stakeholders, assumptions, operational scenarios, MOEs, and non-goals**. Do not select a model, vendor or architecture. Your portal design defense must answer: *is an agent necessary for this problem, or not?*
+
+%%code
+my_conops = {
+    "problem_statement": "",
+    "system_boundary": {"in_scope": [], "out_of_scope": []},
+    "stakeholders": [],
+    "assumptions": [],
+    "scenarios": [],
+    "moes": [],
+    "non_goals": [],
+}
+%%md
+## 7. Public validation
+
+%%code
+result = fmse.check_public(LAB_ID, my_conops)
+result.show()
+%%md
+## 8. Robustness / adversarial probes
+
+Each probe degrades your ConOps (a solution smuggled into the problem statement, the degraded scenario removed, MOEs without numeric targets) and confirms the validators catch it.
+
+%%code
+probe_results = fmse.probe(LAB_ID, my_conops)
+%%md
+## 9. Engineering reflection
+
+Graded in the portal. Draft here if useful:
+- **Design defense:** is an agent necessary for this problem, or not? Use your scenarios and MOEs as evidence.
+- **Decision:** where did you draw the system boundary, and why there?
+- **Remaining risks:** which assumptions, if wrong, would invalidate this ConOps?
+
+%%code
+reflection_draft = {"agent_defense": "", "decision": "", "remaining_risks": ""}
+%%md
+## 10. Export artifact / completion result
+
+%%code
+artifact = fmse.export_artifact(LAB_ID, my_conops, title="ConOps + Problem Definition", fmt="yaml")
+record = fmse.make_completion_record(
+    LAB_ID,
+    result,
+    {"reflection_draft": reflection_draft},
+    artifact=artifact,
+    guided=guided,
+    probes=probe_results,
+)
+fmse.show_record(record)

@@ -1,0 +1,160 @@
+#! lab_id: lab-14 output: labs/lab-14-optimization.ipynb
+%%md
+# FMSE Lab 14 - Optimize a Measured Pipeline
+
+**Course:** FMSE 2026 · **Module 14:** Optimization Engineering with DSPy and Multi-Objective Search · **Phase:** Improve · **Tier:** Architect
+
+Course home and progress: [agentic-ai.es/academy/fmse/learn/m14-optimization-dspy](https://agentic-ai.es/academy/fmse/learn/m14-optimization-dspy).
+
+%%md
+## 0. Mission and competency target
+
+**Mission.** Improve held-out quality by a defined margin without violating cost/latency or high-severity safety constraints.
+
+**Guided lab.** Students establish baseline, split data, run a lightweight optimizer, and compare metrics.
+
+**Competency target (Module 14 outcomes):**
+- Create a baseline and diagnose failure classes before optimizing.
+- Use DSPy signatures/modules and at least one optimizer on a measured task.
+- Compare MIPROv2-style Bayesian instruction/demo search with GEPA-style reflective prompt evolution.
+- Evaluate optimized programs on held-out data and across quality, cost, and latency objectives.
+
+**Scaffolding:** about 10% guided, 90% independent. This is an **engineering challenge**: the guided part gives you a working reference path; the challenge does not.
+
+%%md
+## 1. Requirements and acceptance criteria
+
+Public validators check these requirements. They report which requirement failed and why — never the expected implementation.
+
+| ID | Requirement |
+| --- | --- |
+| OPT-01 | Train/dev/test split present |
+| OPT-02 | Baseline recorded |
+| OPT-03 | Optimization log retained |
+| OPT-04 | Held-out test not used for tuning **(critical)** |
+| OPT-05 | Pareto comparison produced |
+| OPT-06 | Held-out improvement with no protected-case regression **(critical)** |
+
+**Competency gate (portal):** Improvement on held-out data; no protected-regression violations. Quiz >= 80%, the guided lab, the artifact and your reflection are also required. A critical requirement cannot be offset by other scores.
+
+%%md
+## 2. Environment setup
+
+%%setup
+%%md
+## 3. Secrets check
+
+This lab runs fully offline; no provider key is needed. Keys you use elsewhere belong in Colab Secrets and are never printed.
+
+%%code
+fmse.secrets_check()
+%%md
+## 4. Guided experiment
+
+90 labelled support tickets; `security_incident` rows are protected (high severity). `SimProgram(instruction, demos)` stands in for a compiled prompt program; its behaviour is documented in the lab module. An optional cell below shows the DSPy equivalent if the package is installed.
+
+%%code
+from fmse_labkit.labs import lab14
+from fmse_labkit.labs.lab14 import SimProgram, score
+import random
+
+guided = fmse.GuidedLog(LAB_ID, required_steps=["baseline_measured", "error_analysis", "optimizer_run"])
+rows = lab14.dataset()
+ids = [r["id"] for r in rows]
+random.Random(7).shuffle(ids)
+train, dev, test = ids[:45], ids[45:60], ids[60:]
+base = SimProgram("I0")
+print("baseline dev:", score(base, dev), "cost:", base.cost)
+guided.step("baseline_measured")
+%%md
+## 5. Predict before you run
+
+Adding two demos for the weakest label: how much will dev quality and cost change? Write your prediction, then run the experiment.
+
+%%code
+my_prediction = ""
+guided.predict("prediction", my_prediction)
+%%code
+print("failures on dev:", lab14.feedback(base, dev))
+guided.step("error_analysis")
+trials = []
+for inst in lab14.INSTRUCTIONS:
+    p = SimProgram(inst)
+    trials.append((inst, score(p, dev), p.cost, score(p, dev, lab14.PROTECTED)))
+for t in trials:
+    print(t)
+guided.step("optimizer_run")
+try:
+    import dspy  # noqa: F401  (optional)
+    print("DSPy available: the same search maps onto dspy.MIPROv2 / dspy.GEPA with a Signature and a metric.")
+except ImportError:
+    print("DSPy not installed - optional. `pip install dspy` to repeat this with a real optimizer and model.")
+guided.outcome("prediction", "see output above")
+%%md
+**Worksheet.** At least one full sentence per field; these observations are guided-lab evidence.
+
+%%code
+worksheet = {
+    "error_analysis": "",
+    "gaming_observation": "",
+    "prediction_check": "",
+}
+guided.observe(worksheet)
+%%md
+## 6. Challenge
+
+**Improve held-out quality under constraints.** Improve held-out quality by a defined margin without violating cost/latency or high-severity safety constraints.
+
+Constraints:
+- Held-out improvement >= 0.05.
+- Cost <= 420 tokens per call; no regression on security_incident rows.
+
+%%code
+my_optimization = {
+    "splits": {"train": [], "dev": [], "test": []},
+    "baseline": {"program": {"instruction": "I0", "demos": []}, "test_score": None},
+    "optimization_log": [],  # {"trial", "program", "split" (train/dev only!), "score", "cost"}
+    "pareto": [],  # {"program", "quality" (dev), "cost", "dominated"}
+    "selected": {"program": {}},
+    "constraints": {"max_cost": lab14.MAX_COST, "protected_label": lab14.PROTECTED},
+}
+%%md
+## 7. Public validation
+
+%%code
+submission = my_optimization
+result = fmse.check_public(LAB_ID, submission)
+result.show()
+%%md
+## 8. Robustness / adversarial probes
+
+Extra adversarial conditions beyond the graded suite. They do not change your score; they show where your solution is brittle.
+
+%%code
+probe_results = fmse.probe(LAB_ID, submission)
+%%md
+## 9. Engineering reflection
+
+Graded in the portal and stored with your artifact. Draft it here if useful:
+- **Decision:** Why is your selected program the right deployment candidate, given the frontier and constraints?
+- **Trade-offs:** Which candidate scored better on dev but was rejected, and why?
+- **Remaining risks:** How could your held-out result still overstate production quality?
+
+%%code
+reflection_draft = {"decision": "", "tradeoffs": "", "remaining_risks": ""}
+%%md
+## 10. Export artifact / completion result
+
+Exports the **Optimization Report + Compiled Program/Prompt** artifact and prints a completion record. Paste the record into the Module 14 page on agentic-ai.es (**Import lab result**). The record is a learning-workflow document, not a signed certificate.
+
+%%code
+artifact = fmse.export_artifact(LAB_ID, my_optimization, title="Optimization Report + Compiled Program/Prompt", fmt="json")
+record = fmse.make_completion_record(
+    LAB_ID,
+    result,
+    {"reflection_draft": reflection_draft, **{}},
+    artifact=artifact,
+    guided=guided,
+    probes=probe_results,
+)
+fmse.show_record(record)

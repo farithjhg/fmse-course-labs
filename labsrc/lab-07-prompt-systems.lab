@@ -1,0 +1,157 @@
+#! lab_id: lab-07 output: labs/lab-07-prompt-systems.ipynb
+%%md
+# FMSE Lab 07 - Prompt Manifest Laboratory
+
+**Course:** FMSE 2026 · **Module 7:** Prompt Systems Engineering · **Phase:** Create · **Tier:** Engineer
+
+Course home and progress: [agentic-ai.es/academy/fmse/learn/m07-prompt-systems](https://agentic-ai.es/academy/fmse/learn/m07-prompt-systems).
+
+%%md
+## 0. Mission and competency target
+
+**Mission.** Build an invoice extraction prompt/system that handles missing fields, multiple totals, noisy OCR, and adversarial instructions. The prompt is not supplied.
+
+**Guided lab.** Students run a provided extraction prompt, inspect failure cases, and refactor it into structured components.
+
+**Competency target (Module 7 outcomes):**
+- Design prompt manifests that separate stable instructions, evidence, variable input, examples, and output contracts.
+- Choose zero-shot/few-shot and objective-focused/procedural prompting based on experiment results.
+- Reduce instruction ambiguity and prevent untrusted data from being interpreted as authority.
+- Version prompts and connect changes to evaluation evidence.
+
+**Scaffolding:** about 25% guided, 75% independent. This is an **engineering challenge**: the guided part gives you a working reference path; the challenge does not.
+
+%%md
+## 1. Requirements and acceptance criteria
+
+Public validators check these requirements. They report which requirement failed and why — never the expected implementation.
+
+| ID | Requirement |
+| --- | --- |
+| PRM-01 | Schema interface declared |
+| SEC-03 | Untrusted input delimited/separated **(critical)** |
+| PRM-03 | Missing values not invented |
+| PRM-04 | Multiple totals handled |
+| PRM-05 | Prompt version and changelog included |
+| PRM-06 | Public robustness >= 80% across the adversarial invoice set |
+
+**Competency gate (portal):** Challenge >=80% public robustness; design defense explains trade-offs. Quiz >= 80%, the guided lab, the artifact and your reflection are also required. A critical requirement cannot be offset by other scores.
+
+%%md
+## 2. Environment setup
+
+%%setup
+%%md
+## 3. Secrets check
+
+This lab runs fully offline; no provider key is needed. Keys you use elsewhere belong in Colab Secrets and are never printed.
+
+%%code
+fmse.secrets_check()
+%%md
+## 4. Guided experiment
+
+A baseline one-line extraction prompt runs against the public adversarial invoice set (standard, missing fields, multiple totals, noisy OCR, injected instructions). Read the simulator's documented rules in `fmse_labkit/labs/lab07.py` — it is a rule-follower, not an LLM. With a real provider configured, the same code runs against a real model.
+
+%%code
+from fmse_labkit.labs import lab07
+import json
+
+guided = fmse.GuidedLog(LAB_ID, required_steps=["baseline_run", "failures_inspected"])
+model = fmse.model.get_model(lab07.simulated_extractor)
+
+
+def baseline_extract(document):
+    return json.loads(model.complete(lab07.BASELINE_PROMPT + document).text)
+%%md
+## 5. Predict before you run
+
+Which case types (missing, multi_total, ocr, injection) will the baseline prompt get wrong? Write your prediction, then run the experiment.
+
+%%code
+my_prediction = ""
+guided.predict("prediction", my_prediction)
+%%code
+baseline = lab07.evaluate(baseline_extract)
+print("baseline field accuracy:", baseline["accuracy"])
+guided.step("baseline_run")
+for row in baseline["rows"]:
+    wrong = [f for f, ok in row["fields"].items() if not ok]
+    print(row["id"], row["tags"], "wrong:", wrong)
+guided.step("failures_inspected")
+guided.outcome("prediction", "see output above")
+%%md
+**Worksheet.** At least one full sentence per field; these observations are guided-lab evidence.
+
+%%code
+worksheet = {
+    "baseline_failures": "",
+    "component_refactor": "",
+    "prediction_check": "",
+}
+guided.observe(worksheet)
+%%md
+## 6. Challenge
+
+**Robust invoice extraction system.** Build an invoice extraction prompt/system that handles missing fields, multiple totals, noisy OCR, and adversarial instructions. The prompt is not supplied.
+
+Constraints:
+- The system is prompt manifest + deterministic code; either may address a requirement.
+- Public robustness target: 80% field-level accuracy; SEC-03 is critical.
+
+%%code
+my_manifest = {
+    "id": "",
+    "version": "",  # semantic version, e.g. 2.0.0
+    "changelog": [],  # {"version", "date", "change", "evidence"}
+    "instructions": "",
+    "untrusted_input": {"open": "", "close": "", "policy": ""},
+    "output_schema": {},
+    "examples": [],
+}
+
+
+def extract(document):
+    """Your system: prompt (lab07.render_prompt(my_manifest, document) -> model) plus deterministic code."""
+    raise NotImplementedError
+%%md
+## 7. Public validation
+
+%%code
+submission = {"manifest": my_manifest, "extract": extract}
+result = fmse.check_public(LAB_ID, submission)
+result.show()
+%%md
+## 8. Robustness / adversarial probes
+
+Extra adversarial conditions beyond the graded suite. They do not change your score; they show where your solution is brittle.
+
+%%code
+probe_results = fmse.probe(LAB_ID, submission)
+%%md
+## 9. Engineering reflection
+
+Graded in the portal and stored with your artifact. Draft it here if useful:
+- **Design defense:** Which requirements did you satisfy in the prompt and which in deterministic code, and why that split?
+- **Trade-offs:** What did examples, rules or post-processing cost (tokens, maintenance, flexibility)?
+- **Remaining risks:** Which adversarial document would still get through, and what would catch it?
+
+%%code
+reflection_draft = {"design_defense": "", "tradeoffs": "", "remaining_risks": ""}
+%%md
+## 10. Export artifact / completion result
+
+Exports the **Versioned Prompt Manifest + evaluation comparison** artifact and prints a completion record. Paste the record into the Module 7 page on agentic-ai.es (**Import lab result**). The record is a learning-workflow document, not a signed certificate.
+
+%%code
+artifact = fmse.export_artifact(LAB_ID, {"manifest": my_manifest, "evaluation_comparison": {"baseline_accuracy": baseline["accuracy"], "current_accuracy": result.evidence.get("public_accuracy")}},
+                     title="Versioned Prompt Manifest + evaluation comparison", fmt="json")
+record = fmse.make_completion_record(
+    LAB_ID,
+    result,
+    {"reflection_draft": reflection_draft, **{"baseline_accuracy": baseline["accuracy"]}},
+    artifact=artifact,
+    guided=guided,
+    probes=probe_results,
+)
+fmse.show_record(record)

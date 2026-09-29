@@ -1,0 +1,145 @@
+#! lab_id: lab-11 output: labs/lab-11-multimodal-verification.ipynb
+%%md
+# FMSE Lab 11 - Multimodal Document Verification
+
+**Course:** FMSE 2026 · **Module 11:** Multimodal, Computer-Use, and Action Systems · **Phase:** Create · **Tier:** Senior
+
+Course home and progress: [agentic-ai.es/academy/fmse/learn/m11-multimodal-action](https://agentic-ai.es/academy/fmse/learn/m11-multimodal-action).
+
+%%md
+## 0. Mission and competency target
+
+**Mission.** Build a safe browser/computer-use plan for a procurement workflow and implement a simulation with approval checkpoints.
+
+**Guided lab.** Students combine image/document understanding with deterministic numeric checks.
+
+**Competency target (Module 11 outcomes):**
+- Design multimodal inputs with explicit provenance and transformation steps.
+- Use OCR/document parsing only where needed and validate extracted structure.
+- Design computer/browser actions with bounded permissions, checkpoints, and recovery.
+- Evaluate perception and action separately.
+
+**Scaffolding:** about 25% guided, 75% independent. This is an **engineering challenge**: the guided part gives you a working reference path; the challenge does not.
+
+%%md
+## 1. Requirements and acceptance criteria
+
+Public validators check these requirements. They report which requirement failed and why — never the expected implementation.
+
+| ID | Requirement |
+| --- | --- |
+| ACT-01 | Evidence provenance captured |
+| ACT-02 | Action allowlist defined |
+| ACT-03 | High-impact action approval present **(critical)** |
+| ACT-04 | Post-action verification included |
+| ACT-05 | Failure/retry budget bounded |
+| ACT-06 | Simulation passes normal + changed-layout scenarios |
+
+**Competency gate (portal):** Simulation passes normal + changed-layout scenarios. Quiz >= 80%, the guided lab, the artifact and your reflection are also required. A critical requirement cannot be offset by other scores.
+
+%%md
+## 2. Environment setup
+
+%%setup
+%%md
+## 3. Secrets check
+
+This lab runs fully offline; no provider key is needed. Keys you use elsewhere belong in Colab Secrets and are never printed.
+
+%%code
+fmse.secrets_check()
+%%md
+## 4. Guided experiment
+
+A synthetic scanned invoice, given as OCR layout blocks with bounding boxes. Perception reads the table; code checks the arithmetic.
+
+%%code
+from fmse_labkit.labs import lab11
+
+guided = fmse.GuidedLog(LAB_ID, required_steps=["table_extracted", "totals_verified"])
+rows = lab11.extract_table(lab11.SCANNED_INVOICE)
+for r in rows:
+    print(r["item"], r["qty"], r["unit"], r["amount"], "<- bbox", r["provenance"]["bbox"])
+guided.step("table_extracted")
+%%md
+## 5. Predict before you run
+
+Do the line items reconcile with the printed total? Predict before computing. Write your prediction, then run the experiment.
+
+%%code
+my_prediction = ""
+guided.predict("prediction", my_prediction)
+%%code
+computed = round(sum(r["amount"] for r in rows), 2)
+printed = lab11.printed_total(lab11.SCANNED_INVOICE)
+row_errors = [r["item"] for r in rows if round(r["qty"] * r["unit"], 2) != r["amount"]]
+print("computed", computed, "printed", printed, "row errors:", row_errors)
+guided.step("totals_verified")
+guided.outcome("prediction", "see output above")
+%%md
+**Worksheet.** At least one full sentence per field; these observations are guided-lab evidence.
+
+%%code
+worksheet = {
+    "numeric_check": "",
+    "provenance_note": "",
+    "prediction_check": "",
+}
+guided.observe(worksheet)
+%%md
+## 6. Challenge
+
+**Safe procurement browser plan.** Build a safe browser/computer-use plan for a procurement workflow and implement a simulation with approval checkpoints.
+
+Constraints:
+- Only the procurement host is allowlisted.
+- Retries per element are bounded (<= 3).
+
+%%code
+plan = {"allowlist": [], "actions": [], "high_impact": [], "max_retries": 0}
+
+
+def run_procurement(browser, sku, quantity, approver, plan):
+    """Drive browser (goto/find/fill/click/screenshot/page) to order `quantity` of `sku`.
+    Return {"status": "ordered"|"aborted"|"failed", "verified": bool, "evidence": [{"step", "url", "screenshot_sha256"}]}."""
+    raise NotImplementedError
+%%md
+## 7. Public validation
+
+%%code
+submission = {"plan": plan, "run_procurement": run_procurement}
+result = fmse.check_public(LAB_ID, submission)
+result.show()
+%%md
+## 8. Robustness / adversarial probes
+
+Extra adversarial conditions beyond the graded suite. They do not change your score; they show where your solution is brittle.
+
+%%code
+probe_results = fmse.probe(LAB_ID, submission)
+%%md
+## 9. Engineering reflection
+
+Graded in the portal and stored with your artifact. Draft it here if useful:
+- **Decision:** Which actions did you classify as high-impact, and how does your executor verify their outcome?
+- **Trade-offs:** What does locating elements by label cost or risk compared with ids?
+- **Remaining risks:** What page change would still break your plan, and how would you notice?
+
+%%code
+reflection_draft = {"decision": "", "tradeoffs": "", "remaining_risks": ""}
+%%md
+## 10. Export artifact / completion result
+
+Exports the **Multimodal/Action Safety Design** artifact and prints a completion record. Paste the record into the Module 11 page on agentic-ai.es (**Import lab result**). The record is a learning-workflow document, not a signed certificate.
+
+%%code
+artifact = fmse.export_artifact(LAB_ID, {"plan": plan, "scenario_outcomes": result.evidence.get("scenarios")}, title="Multimodal/Action Safety Design", fmt="json")
+record = fmse.make_completion_record(
+    LAB_ID,
+    result,
+    {"reflection_draft": reflection_draft, **{}},
+    artifact=artifact,
+    guided=guided,
+    probes=probe_results,
+)
+fmse.show_record(record)

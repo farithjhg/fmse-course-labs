@@ -1,0 +1,148 @@
+#! lab_id: lab-13 output: labs/lab-13-break-the-agent.ipynb
+%%md
+# FMSE Lab 13 - Break the Agent
+
+**Course:** FMSE 2026 · **Module 13:** AI Security, Red Teaming, and Safety Architecture · **Phase:** Verify & Validate · **Tier:** Senior
+
+Course home and progress: [agentic-ai.es/academy/fmse/learn/m13-security-red-teaming](https://agentic-ai.es/academy/fmse/learn/m13-security-red-teaming).
+
+%%md
+## 0. Mission and competency target
+
+**Mission.** Discover at least four planted vulnerabilities, implement architectural mitigations, and prove the mitigations with regression tests.
+
+**Guided lab.** Students attack a deliberately vulnerable agent and inspect traces.
+
+**Competency target (Module 13 outcomes):**
+- Threat-model direct/indirect prompt injection, sensitive data disclosure, supply-chain/context poisoning, improper output handling, excessive agency, and unbounded consumption.
+- Implement least privilege and approval gates outside the model.
+- Red-team retrieval/tool systems and convert successful attacks into regression tests.
+- Design incident logging, kill switches, and safe degraded modes.
+
+**Scaffolding:** about 25% guided, 75% independent. This is an **engineering challenge**: the guided part gives you a working reference path; the challenge does not.
+
+%%md
+## 1. Requirements and acceptance criteria
+
+Public validators check these requirements. They report which requirement failed and why — never the expected implementation.
+
+| ID | Requirement |
+| --- | --- |
+| RED-01 | At least 4 vulnerabilities documented |
+| RED-02 | Each has asset/impact/control/test |
+| RED-03 | Mutation tools least-privileged **(critical)** |
+| RED-04 | Injection regression tests included **(critical)** |
+| RED-05 | Resource limits defined |
+| RED-06 | Zero known high-severity planted vulnerabilities unresolved **(critical)** |
+
+**Competency gate (portal):** Zero known high-severity planted vulnerabilities unresolved. Quiz >= 80%, the guided lab, the artifact and your reflection are also required. A critical requirement cannot be offset by other scores.
+
+%%md
+## 2. Environment setup
+
+%%setup
+%%md
+## 3. Secrets check
+
+This lab runs fully offline; no provider key is needed. Keys you use elsewhere belong in Colab Secrets and are never printed.
+
+%%code
+fmse.secrets_check()
+%%md
+## 4. Guided experiment
+
+`SupportAgent()` with no hooks, scopes or limits is the vulnerable build. Its 'model' treats any imperative text — from the user or from a retrieved document — as an instruction. Five attacks are prepared.
+
+%%code
+from fmse_labkit.labs import lab13
+
+guided = fmse.GuidedLog(LAB_ID, required_steps=["attacks_run", "traces_inspected"])
+vulnerable = lab13.vulnerable_agent()
+for aid, a in lab13.ATTACKS.items():
+    print(aid, f"[{a['severity']}]", "-", a["request"][:60])
+%%md
+## 5. Predict before you run
+
+Which of the five attacks will succeed against the vulnerable agent? Write your prediction, then run the experiment.
+
+%%code
+my_prediction = ""
+guided.predict("prediction", my_prediction)
+%%code
+results = {aid: lab13.run_attack(vulnerable, aid) for aid in lab13.ATTACKS}
+for aid, res in results.items():
+    print(f"{aid:<36} exploited={lab13.exploited(aid, res)}")
+guided.step("attacks_run")
+r = results["A1-indirect-injection-exfiltration"]
+print("executed:", [(c.tool, c.args.get("to"), c.origin) for c in r.executed])
+print("log:", r.log)
+guided.step("traces_inspected")
+guided.outcome("prediction", "see output above")
+%%md
+**Worksheet.** At least one full sentence per field; these observations are guided-lab evidence.
+
+%%code
+worksheet = {
+    "trace_observation": "",
+    "boundary_observation": "",
+    "prediction_check": "",
+}
+guided.observe(worksheet)
+%%md
+## 6. Challenge
+
+**Find, fix and prove four planted vulnerabilities.** Discover at least four planted vulnerabilities, implement architectural mitigations, and prove the mitigations with regression tests.
+
+Constraints:
+- Mitigations live in the application: scopes, guards, limits, output handling, log redaction.
+- Every high-severity attack must fail against your agent.
+
+%%code
+def build_agent():
+    """Return lab13.SupportAgent(hooks=..., tool_scopes=..., limits=...) with your architectural mitigations."""
+    raise NotImplementedError
+
+
+report = []  # {"id", "title", "asset", "impact", "control", "test" (a regression test id), "severity"}
+regression_tests = []  # {"id", "attack": attack id, "check": fn(agent) -> True when the agent is safe}
+%%md
+## 7. Public validation
+
+%%code
+submission = {"build_agent": build_agent, "report": report, "regression_tests": regression_tests}
+result = fmse.check_public(LAB_ID, submission)
+result.show()
+%%md
+## 8. Robustness / adversarial probes
+
+Extra adversarial conditions beyond the graded suite. They do not change your score; they show where your solution is brittle.
+
+%%code
+probe_results = fmse.probe(LAB_ID, submission)
+%%md
+## 9. Engineering reflection
+
+Graded in the portal and stored with your artifact. Draft it here if useful:
+- **Decision:** Which control addresses the indirect injection, and why can it not live in the prompt?
+- **Trade-offs:** Which legitimate behaviour did your controls restrict, and how did you keep the agent useful?
+- **Remaining risks:** Which attack class have you not tested, and what would it target?
+
+%%code
+reflection_draft = {"decision": "", "tradeoffs": "", "remaining_risks": ""}
+%%md
+## 10. Export artifact / completion result
+
+Exports the **Threat Model + Red-Team Report + Security Regression Suite** artifact and prints a completion record. Paste the record into the Module 13 page on agentic-ai.es (**Import lab result**). The record is a learning-workflow document, not a signed certificate.
+
+%%code
+artifact = fmse.export_artifact(LAB_ID, {"report": report, "regression_tests": [{"id": t.get("id"), "attack": t.get("attack")} for t in regression_tests]},
+                     title="Threat Model + Red-Team Report + Security Regression Suite", fmt="json")
+record = fmse.make_completion_record(
+    LAB_ID,
+    result,
+    {"reflection_draft": reflection_draft, **{}},
+    artifact=artifact,
+    guided=guided,
+    probes=probe_results,
+)
+fmse.show_record(record)

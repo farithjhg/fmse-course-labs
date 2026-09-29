@@ -1,0 +1,147 @@
+#! lab_id: lab-06 output: labs/lab-06-trade-study.ipynb
+%%md
+# FMSE Lab 06 - Architecture Trade Study Workbench
+
+**Course:** FMSE 2026 · **Module 6:** Architecture Patterns and Trade Studies · **Phase:** Architect · **Tier:** Engineer
+
+Course home and progress: [agentic-ai.es/academy/fmse/learn/m06-architecture-trade-studies](https://agentic-ai.es/academy/fmse/learn/m06-architecture-trade-studies).
+
+%%md
+## 0. Mission and competency target
+
+**Mission.** Design three architectures for a high-volume support workflow with strict security and cost constraints. Select one only after measured/estimated trade analysis.
+
+**Guided lab.** Students complete candidate matrices and sensitivity plots from supplied benchmark data.
+
+**Competency target (Module 6 outcomes):**
+- Compare single-call, deterministic pipeline, prompt chain, workflow/orchestrator, tool-using agent, and multi-agent patterns.
+- Create Pugh/weighted trade studies with sensitivity analysis.
+- Identify trust boundaries, deterministic boundaries, and failure containment zones.
+- Produce Architecture Decision Records tied to requirements.
+
+**Scaffolding:** about 25% guided, 75% independent. This is an **design challenge**: the guided part gives you a working reference path; the challenge does not.
+
+%%md
+## 1. Requirements and acceptance criteria
+
+Public validators check these requirements. They report which requirement failed and why — never the expected implementation.
+
+| ID | Requirement |
+| --- | --- |
+| ARC-01 | >=3 credible alternatives |
+| ARC-02 | Criteria trace to requirements |
+| ARC-03 | Weights sum to 1 |
+| ARC-04 | Sensitivity analysis executed |
+| ARC-05 | Decision includes reversal/revisit conditions |
+
+**Competency gate (portal):** Architecture defense PASS. Quiz >= 80%, the guided lab, the artifact and your reflection are also required. A critical requirement cannot be offset by other scores.
+
+%%md
+## 2. Environment setup
+
+%%setup
+%%md
+## 3. Secrets check
+
+This lab runs fully offline; no provider key is needed. Keys you use elsewhere belong in Colab Secrets and are never printed.
+
+%%code
+fmse.secrets_check()
+%%md
+## 4. Guided experiment
+
+Supplied, estimated benchmark data for six architecture patterns in a high-volume support workflow. `weighted_totals`, `winner` and `perturb` implement the course's trade-study conventions.
+
+%%code
+from fmse_labkit.labs import lab06
+import json
+
+guided = fmse.GuidedLog(LAB_ID, required_steps=["matrix_completed", "sensitivity_run"])
+print(json.dumps(lab06.SCENARIO, indent=2))
+for p, row in lab06.BENCHMARK.items():
+    print(f"{p:<24} {row}")
+%%md
+## 5. Predict before you run
+
+Which pattern will win a matrix weighted towards security and cost — and does the most accurate pattern win? Write your prediction, then run the experiment.
+
+%%code
+my_prediction = ""
+guided.predict("prediction", my_prediction)
+%%code
+criteria = [{"id": "sec", "weight": 0.35}, {"id": "cost", "weight": 0.35}, {"id": "acc", "weight": 0.30}]
+scores = {"pipeline": {"sec": 5, "cost": 5, "acc": 3}, "orchestrator": {"sec": 4, "cost": 4, "acc": 4}, "agent": {"sec": 2, "cost": 1, "acc": 5}}
+print("totals:", lab06.weighted_totals(scores, criteria), "winner:", lab06.winner(scores, criteria))
+guided.step("matrix_completed")
+for cid in ("sec", "cost"):
+    for d in (0.2, -0.2):
+        print(cid, f"{d:+.0%}", "->", lab06.winner(scores, lab06.perturb(criteria, cid, d)))
+guided.step("sensitivity_run")
+guided.outcome("prediction", "see output above")
+%%md
+**Worksheet.** At least one full sentence per field; these observations are guided-lab evidence.
+
+%%code
+worksheet = {
+    "matrix_observation": "",
+    "sensitivity_observation": "",
+    "prediction_check": "",
+}
+guided.observe(worksheet)
+%%md
+## 6. Challenge
+
+**Three architectures for a high-volume support workflow.** Design three architectures for a high-volume support workflow with strict security and cost constraints. Select one only after measured/estimated trade analysis.
+
+Constraints:
+- Criteria must trace to the scenario requirement ids.
+- Sensitivity: perturb the two highest weights by +/-20% and renormalize.
+
+%%code
+my_study = {
+    "alternatives": [],  # {"id", "name", "pattern" (see lab06.PATTERNS), "description"}
+    "criteria": [],  # {"id", "name", "weight", "requirements": [scenario requirement ids]}
+    "scores": {},  # alternative id -> {criterion id: 1-5}
+    "sensitivity": [],  # {"criterion", "delta": +0.2/-0.2, "winner"} for the two highest weights
+    "decision": {"selected": "", "context": "", "rationale": "", "consequences": "", "revisit_triggers": []},
+}
+%%md
+## 7. Public validation
+
+%%code
+submission = my_study
+result = fmse.check_public(LAB_ID, submission)
+result.show()
+%%md
+## 8. Robustness / adversarial probes
+
+Extra adversarial conditions beyond the graded suite. They do not change your score; they show where your solution is brittle.
+
+%%code
+probe_results = fmse.probe(LAB_ID, submission)
+%%md
+## 9. Engineering reflection
+
+Graded in the portal and stored with your artifact. Draft it here if useful:
+- **Architecture defense:** Why does the selected architecture exist, and why were the others rejected? Use your trade study as evidence.
+- **Trade-offs:** What does your choice give up, and under which requirement changes would you reverse it?
+- **Remaining risks:** Which trust boundary or failure containment zone worries you most?
+
+%%code
+reflection_draft = {"architecture_defense": "", "tradeoffs": "", "remaining_risks": ""}
+%%md
+## 10. Export artifact / completion result
+
+Exports the **Architecture Specification + Pugh/Trade Study + ADRs** artifact and prints a completion record. Paste the record into the Module 6 page on agentic-ai.es (**Import lab result**). The record is a learning-workflow document, not a signed certificate.
+
+%%code
+artifact = fmse.export_artifact(LAB_ID, my_study, title="Architecture Specification + Pugh/Trade Study + ADRs", fmt="json")
+record = fmse.make_completion_record(
+    LAB_ID,
+    result,
+    {"reflection_draft": reflection_draft, **{}},
+    artifact=artifact,
+    guided=guided,
+    probes=probe_results,
+)
+fmse.show_record(record)

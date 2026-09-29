@@ -1,0 +1,209 @@
+{
+  "labkit_version": "1.0.0",
+  "files": [
+    {
+      "path": "README.md",
+      "sha256": "53eee5c7add8c0666fc6eb5261146f11f008b82c14eb545fd18c3c1cabde556e"
+    },
+    {
+      "path": "capstone/README.md",
+      "sha256": "e49342381f7ddc178fa20b454af155f0fac48615972e2adeca30088d243aa7be"
+    },
+    {
+      "path": "capstone/capstone-studio.ipynb",
+      "sha256": "bb38602f4cff88370502611185f0f9c6fdf068c1c55bab576caebdeb26796074"
+    },
+    {
+      "path": "capstone/datasets/bank_export.csv",
+      "sha256": "6c79ceec1a454449fa99abedfc0624bcfc7e18f91753f1751c4e34b3ed220548"
+    },
+    {
+      "path": "capstone/datasets/ledger_entries.csv",
+      "sha256": "6d8ae55f29d1492d6e92c8b70f7cae00fdb2d0a1eb27ccf9e4ba67151df4dc9d"
+    },
+    {
+      "path": "capstone/datasets/vendor_master.csv",
+      "sha256": "d5a786e9a7cb8381a219bc015eafe22b4a5fc4ad7a0cb089bd6a908766c9d52c"
+    },
+    {
+      "path": "capstone/templates/milestones.yaml",
+      "sha256": "b4c64b02ff5795b46886b952b102dd6495046af47386cfddfe1e952d5eeb712c"
+    },
+    {
+      "path": "fmse_labkit/__init__.py",
+      "sha256": "af663385ccda768de58b5a08570717d68e3cb37d93afb311523e647ec512971a"
+    },
+    {
+      "path": "fmse_labkit/core.py",
+      "sha256": "3bb599a3076dfe684b25ae72aa87ed9b68cb1fc8fd9f2b49c6f0a6f9fa83d909"
+    },
+    {
+      "path": "fmse_labkit/data/__init__.py",
+      "sha256": "a46fa845a4f94d4daf8fa9d2b5f4ab8a8fbe387a507c4a6fd2fd85f709803a54"
+    },
+    {
+      "path": "fmse_labkit/labs/__init__.py",
+      "sha256": "2f520c8d50955c39b4b990996e8d6756d9f10fc5887532fb4d2c8e3970359157"
+    },
+    {
+      "path": "fmse_labkit/labs/capstone.py",
+      "sha256": "fcc17e709fac4f693623539392eca99b2abbbbefd52a6a85735a5adcb3dd986c"
+    },
+    {
+      "path": "fmse_labkit/labs/lab00.py",
+      "sha256": "1f11540ddb060a6d2ebef50df964ab85f0e962c61ff6f1f4f02e53d2d4fe842a"
+    },
+    {
+      "path": "fmse_labkit/labs/lab01.py",
+      "sha256": "ebadb9ae2f7a28f0ed94663390fc8c235125d95da9cab213f6b8483f84532fd8"
+    },
+    {
+      "path": "fmse_labkit/labs/lab02.py",
+      "sha256": "cd3432db2175cc9643fd9abf4e132d53dad55029ef9c2db2b87a916dd2219934"
+    },
+    {
+      "path": "fmse_labkit/labs/lab03.py",
+      "sha256": "d1fa2cb59c01f61529eb1f910b3ee88bd473585403759d3f6c610b27bd224a70"
+    },
+    {
+      "path": "fmse_labkit/labs/lab04.py",
+      "sha256": "30cc1573028a719d27f4abf8f55f1ecc2730a28ed20dd6f555554050688c8521"
+    },
+    {
+      "path": "fmse_labkit/labs/lab05.py",
+      "sha256": "4b3e9b28e8dacb34dbceed123b1e7cdf1b0394eb35a94050174a650bb042bb97"
+    },
+    {
+      "path": "fmse_labkit/labs/lab06.py",
+      "sha256": "7eb3725b46ce96c7248343c93f9a8d5b49fc563f5ef73e18d53390deb385f7df"
+    },
+    {
+      "path": "fmse_labkit/labs/lab07.py",
+      "sha256": "b87da79371020cd3153af8c77240a8b33283e03de1435aaeb1d7994f1fad62fd"
+    },
+    {
+      "path": "fmse_labkit/labs/lab08.py",
+      "sha256": "90d693be0f04001804ce1975cd360745d5652bc227b9cd523fbdbc958d7ba8a3"
+    },
+    {
+      "path": "fmse_labkit/labs/lab09.py",
+      "sha256": "e2d8e8f86b3d2e1d815c060d86d57db5fa27b6a6e34b574aa18bcedb05ad398d"
+    },
+    {
+      "path": "fmse_labkit/labs/lab10.py",
+      "sha256": "e8b21ace30587d8c12996c88f96db7a1c5db9ea49d6c3da58cb364dca635ff22"
+    },
+    {
+      "path": "fmse_labkit/labs/lab11.py",
+      "sha256": "f6320952833dd048f443d8ef5b8aa7ce585ff525e53368e660b508af411e2788"
+    },
+    {
+      "path": "fmse_labkit/labs/lab12.py",
+      "sha256": "ccfe1d7440292cdabdfffe305954ec6bc1734cfb8ad1d789f1327745eba39e50"
+    },
+    {
+      "path": "fmse_labkit/labs/lab13.py",
+      "sha256": "ca1737718ef494d1c3f9239fb54960973986987608abb031d134af8ed755ff9a"
+    },
+    {
+      "path": "fmse_labkit/labs/lab14.py",
+      "sha256": "e9c2cdeb1d6a105e4e6bdbcb74105609173fec9afd2c79875f9938ea23a523a1"
+    },
+    {
+      "path": "fmse_labkit/labs/lab15.py",
+      "sha256": "a24c0ac2f198a7f3e9bab774bec822069029f1552be47d10b372e08b65f716f4"
+    },
+    {
+      "path": "fmse_labkit/model.py",
+      "sha256": "a7e3b5331fb6055aa7f0cf3b06fdd8289b22b96f8f6098b6586d22c12faa853d"
+    },
+    {
+      "path": "fmse_labkit/records.py",
+      "sha256": "f212e0120368f1256504321d31f7ec81b39f43b204c62939eebf6fa749f2b86e"
+    },
+    {
+      "path": "fmse_labkit/remote.py",
+      "sha256": "48ffb2444da1ec7ca2e415307396e1ebe8e826c65611c2a632a18ed6333645ed"
+    },
+    {
+      "path": "fmse_labkit/schema.py",
+      "sha256": "b5d48d12b8224ce96db9ebec9a09669b4eccb851e34ed64c08118df78d9dd890"
+    },
+    {
+      "path": "fmse_labkit/secrets.py",
+      "sha256": "1da6e75f34ffac55479b1ab342140b64906922c8e2624a9f6a03889960369dc8"
+    },
+    {
+      "path": "fmse_labkit/textutil.py",
+      "sha256": "135ebdcd8b6aab6e1d160082875ef88c64e7dce37a1deb4fc511e07c26686683"
+    },
+    {
+      "path": "labs/lab-00-task-framing.ipynb",
+      "sha256": "87690220c0a045a65e21cd55e41ae861191e290dfb6eb1e087dcef7fae895b2e"
+    },
+    {
+      "path": "labs/lab-01-typed-model-call.ipynb",
+      "sha256": "ee6a5d113bd7d520d5d1f0b64e3cd15077f17998bf9dc4e424a0c115886dec9e"
+    },
+    {
+      "path": "labs/lab-02-conops-builder.ipynb",
+      "sha256": "df7a3cca053a197a8b13b95f3e3a27773d2bdb577867ac1f15da7938c508cf6a"
+    },
+    {
+      "path": "labs/lab-03-ai-fmea.ipynb",
+      "sha256": "940a761e1ae9fcee8e6f174ecb723a67674470dd537c82c60f9702804b6ac15f"
+    },
+    {
+      "path": "labs/lab-04-model-profiler.ipynb",
+      "sha256": "ef32dfbdcfd6bd4f4679cc0370baac9516ca11e5017ea0d154fa95e20ba6fdad"
+    },
+    {
+      "path": "labs/lab-05-rag-first-principles.ipynb",
+      "sha256": "37e6340e3002cb62046a1e35e4316adcf626def802927a745aaa0cc4132c3e5b"
+    },
+    {
+      "path": "labs/lab-06-trade-study.ipynb",
+      "sha256": "9d400118264e0761cb1607efeaa677c24973a0466d185f5e1da24c9a6e825088"
+    },
+    {
+      "path": "labs/lab-07-prompt-systems.ipynb",
+      "sha256": "6788012d37728393461d6e18ac0a3fccb3421cad7cc72aefd08cacea49ecee2c"
+    },
+    {
+      "path": "labs/lab-08-tool-contracts.ipynb",
+      "sha256": "be059c457e73845e2737110183cc05a875c2ac497cf5e2722c4f2f546f0893e4"
+    },
+    {
+      "path": "labs/lab-09-context-budget.ipynb",
+      "sha256": "eb515ed783c4aef8589ec4b760c1e3ba1198f188d86348799ac7814347a24baf"
+    },
+    {
+      "path": "labs/lab-10-safe-agent-mcp.ipynb",
+      "sha256": "a30f03017bf904b6210df90b3e3e57e9f18cd3400391cb77d2aa60f38fb22668"
+    },
+    {
+      "path": "labs/lab-11-multimodal-verification.ipynb",
+      "sha256": "d7d9049a851380b8e716411aef4781032121c7e2c793a271fb7b7974a50064b2"
+    },
+    {
+      "path": "labs/lab-12-evaluation-harness.ipynb",
+      "sha256": "ea38fccb2a020e65f8e5748ac44cc8aacf79ed5727e715bd9bcc615e13e99c10"
+    },
+    {
+      "path": "labs/lab-13-break-the-agent.ipynb",
+      "sha256": "e3f77e6bc39cad9ddddbafca7292aff4bd5d3358938c7f1d439c1dcfb4cc1f14"
+    },
+    {
+      "path": "labs/lab-14-optimization.ipynb",
+      "sha256": "3fc01e9de8df12fbb9bb361bd780dc33e21c9203af5ab331cac8eceb54af46d1"
+    },
+    {
+      "path": "labs/lab-15-production.ipynb",
+      "sha256": "b166627f358884755aafedce4fde2214145f223b216b6fafcaeb4ce0cf815c73"
+    },
+    {
+      "path": "requirements.txt",
+      "sha256": "c9c745041472752c554ec8eb6b6bb626e13d4e7881bd27bc2c9d704b4fbb7f1e"
+    }
+  ]
+}

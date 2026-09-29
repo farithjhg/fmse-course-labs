@@ -1,0 +1,154 @@
+#! lab_id: lab-03 output: labs/lab-03-ai-fmea.ipynb
+%%md
+# FMSE Lab 03 - Requirements and AI-FMEA Workbench
+
+**Course:** FMSE 2026 · **Module 3:** Requirements Engineering and AI-FMEA · **Phase:** Define · **Tier:** Practitioner
+
+Course home and progress: [agentic-ai.es/academy/fmse/learn/m03-requirements-fmea](https://agentic-ai.es/academy/fmse/learn/m03-requirements-fmea).
+
+%%md
+## 0. Mission and competency target
+
+**Mission.** Analyze an invoice-to-payment assistant with intentionally planted failure modes. Produce 12+ requirements and an AI-FMEA covering at least 10 failure modes, including indirect prompt injection and excessive agency.
+
+**Guided lab.** Students write requirements in YAML, calculate RPN values, and run a linter that checks uniqueness, verifiability metadata, and traceability.
+
+**Competency target (Module 3 outcomes):**
+- Write clear, feasible, necessary, unambiguous, and verifiable requirements.
+- Build bidirectional traceability from stakeholder need to requirement to verification method.
+- Perform AI Failure Modes and Effects Analysis using Severity, Occurrence, and Detection as one risk-prioritization technique.
+- Design mitigations outside the model where deterministic controls are appropriate.
+
+**Scaffolding:** about 50% guided, 50% independent. This is an **design challenge**: the guided part gives you a working reference path; the challenge does not.
+
+%%md
+## 1. Requirements and acceptance criteria
+
+Public validators check these requirements. They report which requirement failed and why — never the expected implementation.
+
+| ID | Requirement |
+| --- | --- |
+| REQ-01 | Every requirement has ID, statement, rationale, verification method |
+| REQ-02 | No duplicate IDs |
+| REQ-03 | At least one requirement in each required category |
+| REQ-04 | RPN arithmetic correct |
+| REQ-05 | Every high-severity failure has at least one mitigation and verification link **(critical)** |
+| REQ-06 | At least 12 requirements and 10 failure modes, including indirect prompt injection and excessive agency |
+
+**Competency gate (portal):** Artifact PASS; peer/design review; quiz >= 80%. Quiz >= 80%, the guided lab, the artifact and your reflection are also required. A critical requirement cannot be offset by other scores.
+
+%%md
+## 2. Environment setup
+
+%%setup
+%%md
+## 3. Secrets check
+
+This lab runs fully offline; no provider key is needed. Keys you use elsewhere belong in Colab Secrets and are never printed.
+
+%%code
+fmse.secrets_check()
+%%md
+## 4. Guided experiment
+
+The starter below is the requirements YAML for the invoice-to-payment assistant — with planted defects. The linter is the same set of public checks that grades the challenge.
+
+%%code
+import copy
+from fmse_labkit.labs import lab03
+import yaml
+
+guided = fmse.GuidedLog(LAB_ID, required_steps=["lint_starter", "compute_rpn", "starter_fixed"])
+print(lab03.SCENARIO, "\n")
+starter = yaml.safe_load(lab03.GUIDED_STARTER)
+print(lab03.GUIDED_STARTER)
+%%md
+## 5. Predict before you run
+
+Which of REQ-01 ... REQ-06 will the starter fail, and why? Write your prediction, then run the experiment.
+
+%%code
+my_prediction = ""
+guided.predict("prediction", my_prediction)
+%%code
+lab03.lint(starter)
+guided.step("lint_starter")
+row = starter["fmea"][0]
+print("Recomputed RPN for", row["id"], "=", lab03.rpn(row["severity"], row["occurrence"], row["detection"]), "(recorded:", row["rpn"], ")")
+guided.step("compute_rpn")
+guided.outcome("prediction", "see output above")
+%%md
+Fix the starter in the next cell: unique ids, a verification method on every requirement, correct RPN, and a mitigation plus verification link for FM-01. The fix is accepted when uniqueness (REQ-02), verifiability (REQ-01) and RPN (REQ-04) pass.
+
+%%code
+guided_fixed = copy.deepcopy(starter)  # edit this copy
+guided_result = fmse.check_public(LAB_ID, guided_fixed)
+if all(ch.status == "pass" for ch in guided_result.checks if ch.id in ("REQ-01", "REQ-02", "REQ-04")):
+    guided.step("starter_fixed")
+    print("Starter fixed: uniqueness, verifiability and RPN checks pass.")
+else:
+    print("Not yet:", [ch.id for ch in guided_result.checks if ch.status == "fail" and ch.id in ("REQ-01", "REQ-02", "REQ-04")])
+%%md
+**Worksheet.** At least one full sentence per field; these observations are guided-lab evidence.
+
+%%code
+worksheet = {
+    "lint_findings": "",
+    "rpn_reflection": "",
+    "prediction_check": "",
+}
+guided.observe(worksheet)
+%%md
+## 6. Challenge
+
+**Invoice-to-payment assistant: requirements and AI-FMEA.** Analyze an invoice-to-payment assistant with intentionally planted failure modes. Produce 12+ requirements and an AI-FMEA covering at least 10 failure modes, including indirect prompt injection and excessive agency.
+
+Constraints:
+- Every requirement is a single 'shall' obligation with rationale and verification method.
+- Severity, Occurrence and Detection use a 1-10 scale; severity 8+ is high.
+
+%%code
+my_spec = {
+    "requirements": [],  # {id, category, statement ("shall"), rationale, verification_method}
+    "fmea": [],  # {id, failure_mode, effect, severity, occurrence, detection, rpn, mitigations, verification}
+}
+%%md
+## 7. Public validation
+
+%%code
+submission = my_spec
+result = fmse.check_public(LAB_ID, submission)
+result.show()
+%%md
+## 8. Robustness / adversarial probes
+
+Extra adversarial conditions beyond the graded suite. They do not change your score; they show where your solution is brittle.
+
+%%code
+probe_results = fmse.probe(LAB_ID, submission)
+%%md
+## 9. Engineering reflection
+
+Graded in the portal and stored with your artifact. Draft it here if useful:
+- **Decision:** Which failure mode did you rank most important, and which control layer did you choose for it?
+- **Trade-offs:** Where did a deterministic control cost usability or throughput, and why accept it?
+- **Remaining risks:** Which risks remain after mitigation, and how will you detect them in operation?
+
+%%code
+reflection_draft = {"decision": "", "tradeoffs": "", "remaining_risks": ""}
+%%md
+## 10. Export artifact / completion result
+
+Exports the **System Requirements Specification + Traceability Matrix + AI-FMEA** artifact and prints a completion record. Paste the record into the Module 3 page on agentic-ai.es (**Import lab result**). The record is a learning-workflow document, not a signed certificate.
+
+%%code
+artifact = fmse.export_artifact(LAB_ID, my_spec, title="System Requirements Specification + Traceability Matrix + AI-FMEA", fmt="yaml")
+record = fmse.make_completion_record(
+    LAB_ID,
+    result,
+    {"reflection_draft": reflection_draft, **{}},
+    artifact=artifact,
+    guided=guided,
+    probes=probe_results,
+)
+fmse.show_record(record)
