@@ -26,6 +26,7 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, Optional
 
 from .secrets import get_secret, redact
+from .i18n import add_catalog, t
 
 
 def approx_tokens(text: str) -> int:
@@ -145,16 +146,24 @@ def get_model(behavior: Optional[Callable[..., str]] = None, prefer_real: bool =
     model = (get_secret("FMSE_MODEL") or "").strip()
     if prefer_real and provider:
         if provider not in _KEY_NAMES:
-            print(f"FMSE_PROVIDER={provider!r} is not supported (use gemini, openai or anthropic). Using the simulator.")
+            print(t("FMSE_PROVIDER={provider} is not supported (use gemini, openai or anthropic). Using the simulator.", provider=repr(provider)))
         elif not model:
-            print("FMSE_PROVIDER is set but FMSE_MODEL is not. Set the model id you want to test. Using the simulator.")
+            print(t("FMSE_PROVIDER is set but FMSE_MODEL is not. Set the model id you want to test. Using the simulator."))
         else:
             key = next((k for k in (get_secret(n) for n in _KEY_NAMES[provider]) if k), None)
             if key:
-                print(f"Using real provider: {provider} / {model} (key found; value not shown).")
+                print(t("Using real provider: {provider} / {model} (key found; value not shown).", provider=provider, model=model))
                 return ProviderModel(provider, model, key)
-            print(f"No key found for {provider}. Using the simulator.")
+            print(t("No key found for {provider}. Using the simulator.", provider=provider))
     return SimulatedModel(behavior, **sim_kwargs)
 
 
 __all__ = ["ModelError", "ModelResponse", "ProviderModel", "SimulatedModel", "approx_tokens", "get_model"]
+
+
+add_catalog({
+    "FMSE_PROVIDER={provider} is not supported (use gemini, openai or anthropic). Using the simulator.": "FMSE_PROVIDER={provider} no es un proveedor admitido (usa gemini, openai o anthropic). Se usa el simulador.",
+    "FMSE_PROVIDER is set but FMSE_MODEL is not. Set the model id you want to test. Using the simulator.": "FMSE_PROVIDER está definido, pero FMSE_MODEL no. Indica el id del modelo que quieres probar. Se usa el simulador.",
+    "Using real provider: {provider} / {model} (key found; value not shown).": "Proveedor real en uso: {provider} / {model} (clave encontrada; el valor no se muestra).",
+    "No key found for {provider}. Using the simulator.": "No se encontró ninguna clave para {provider}. Se usa el simulador.",
+})

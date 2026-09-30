@@ -1,0 +1,146 @@
+#! lab_id: lab-07 output: labs/lab-07-prompt-systems.es.ipynb
+%%md
+# FMSE Laboratorio 07 - Laboratorio de manifiestos de prompt
+
+**Curso:** FMSE 2026 · **Módulo 7:** Ingeniería de sistemas de prompts · **Fase:** Construir · **Nivel:** Ingeniería
+
+La página del curso y tu progreso están en [agentic-ai.es/academy/fmse/learn/m07-prompt-systems](https://agentic-ai.es/academy/fmse/learn/m07-prompt-systems).
+
+> **Sobre el idioma.** El código, las claves de los datos y las facturas de ejemplo se quedan en inglés; los mensajes de los validadores están en español. Las instrucciones de tu manifiesto puedes escribirlas en español: los validadores reconocen, por ejemplo, "no fiable", "total a pagar" o "devuelve null si falta".
+%%md
+## 0. Misión y competencia objetivo
+
+**Misión.** Construir un prompt o un sistema de extracción de facturas que maneje campos ausentes, varios totales, OCR con ruido e instrucciones malintencionadas. El prompt no se te da.
+
+**Laboratorio guiado.** Ejecutas un prompt de extracción que se te da hecho, examinas los casos en los que falla y lo refactorizas en componentes estructurados.
+
+**Competencia objetivo (resultados del Módulo 7):**
+- Diseñar manifiestos de prompt que separen las instrucciones estables, la evidencia, la entrada variable, los ejemplos y los contratos de salida.
+- Decidir con los resultados de tus experimentos si usar zero-shot o few-shot, y si el prompt debe centrarse en el objetivo o describir un procedimiento.
+- Reducir la ambigüedad de las instrucciones y evitar que los datos no fiables se interpreten como si tuvieran autoridad.
+- Versionar los prompts y ligar cada cambio a evidencia de evaluación.
+
+**Guía:** alrededor de un 25% guiado y un 75% por tu cuenta. Es un **reto de ingeniería**: el experimento guiado (secciones 4 y 5) te da un camino de referencia que funciona; el reto (sección 6), no.
+%%md
+## 1. Requisitos y criterios de aceptación
+
+Estos requisitos los comprueban validadores públicos. Te dicen *qué requisito* falló y por qué, nunca la implementación que se esperaba.
+
+| ID | Requisito |
+| --- | --- |
+| PRM-01 | Se declara la interfaz del esquema |
+| SEC-03 | La entrada no fiable está delimitada o separada **(crítico)** |
+| PRM-03 | No se inventan los valores ausentes |
+| PRM-04 | Se gestionan las facturas con varios totales |
+| PRM-05 | Se incluyen la versión del prompt y el registro de cambios |
+| PRM-06 | Robustez pública >= 80% en el conjunto de facturas adversariales |
+
+**Control de competencia (portal):** reto con una robustez pública >= 80%; la defensa del diseño explica los compromisos. También hay que aprobar el cuestionario (>= 80%) y completar el laboratorio guiado, el artefacto y la reflexión. Un requisito crítico no se compensa con otras puntuaciones.
+%%md
+## 2. Preparación del entorno
+%%setup
+%%md
+## 3. Comprobación de secretos
+
+Este laboratorio funciona por completo sin conexión: no necesita ninguna clave de proveedor. Si usas claves en otros laboratorios, guárdalas en los Secretos de Colab; nunca se imprimen.
+%%code
+fmse.secrets_check()
+%%md
+## 4. Experimento guiado
+
+La línea base es un prompt de extracción de una sola línea. Lo vas a ejecutar sobre el conjunto público de facturas adversariales: facturas normales, con campos ausentes, con varios totales, con OCR con ruido y con instrucciones inyectadas. Lee las reglas del simulador, documentadas en `fmse_labkit/labs/lab07.py`: sigue reglas, no es un LLM. Si configuraste un proveedor real, el mismo código se ejecuta contra un modelo real. Las facturas de ejemplo están en inglés.
+%%code
+from fmse_labkit.labs import lab07
+import json
+
+guided = fmse.GuidedLog(LAB_ID, required_steps=["baseline_run", "failures_inspected"])
+model = fmse.model.get_model(lab07.simulated_extractor)
+
+
+def baseline_extract(document):
+    return json.loads(model.complete(lab07.BASELINE_PROMPT + document).text)
+%%md
+## 5. Predice antes de ejecutar
+
+¿En qué tipos de caso (missing, multi_total, ocr, injection) se va a equivocar el prompt de la línea base? Escribe tu predicción y después ejecuta el experimento.
+%%code
+my_prediction = ""
+guided.predict("prediction", my_prediction)
+%%code
+baseline = lab07.evaluate(baseline_extract)
+print("exactitud por campo de la línea base:", baseline["accuracy"])
+guided.step("baseline_run")
+for row in baseline["rows"]:
+    wrong = [f for f, ok in row["fields"].items() if not ok]
+    print(row["id"], row["tags"], "campos incorrectos:", wrong)
+guided.step("failures_inspected")
+guided.outcome("prediction", "ver la salida de arriba")
+%%md
+**Hoja de trabajo.** Anota lo que observaste, al menos una frase completa por campo: estas observaciones forman parte de la evidencia de tu laboratorio guiado.
+%%code
+worksheet = {
+    "baseline_failures": "",  # ¿En qué tipos de caso falló la línea base y en qué campos se equivocó?
+    "component_refactor": "",  # ¿Qué componentes del manifiesto separaste y qué cambió al volver a medir?
+    "prediction_check": "",  # ¿Acertaste en tu predicción? ¿Qué se te escapó?
+}
+guided.observe(worksheet)
+%%md
+## 6. Reto
+
+**Sistema robusto de extracción de facturas.** Construye un prompt o un sistema de extracción de facturas que maneje campos ausentes, varios totales, OCR con ruido e instrucciones malintencionadas. El prompt no se te da.
+
+Restricciones:
+- El sistema es el manifiesto de prompt más código determinista; cualquiera de los dos puede cubrir un requisito.
+- Objetivo de robustez pública: 80% de exactitud por campo; SEC-03 es crítico.
+%%code
+my_manifest = {
+    "id": "",
+    "version": "",  # versión semántica, por ejemplo 2.0.0
+    "changelog": [],  # {"version", "date", "change", "evidence"}
+    "instructions": "",
+    "untrusted_input": {"open": "", "close": "", "policy": ""},
+    "output_schema": {},
+    "examples": [],
+}
+
+
+def extract(document):
+    """Tu sistema: el prompt (lab07.render_prompt(my_manifest, document) -> modelo) más código determinista."""
+    raise NotImplementedError
+%%md
+## 7. Validación pública
+%%code
+submission = {"manifest": my_manifest, "extract": extract}
+result = fmse.check_public(LAB_ID, submission)
+result.show()
+%%md
+## 8. Robustez / pruebas adversariales
+
+Condiciones adversariales que van más allá de la batería que se califica. No cambian tu puntuación: te muestran dónde es frágil tu solución.
+%%code
+probe_results = fmse.probe(LAB_ID, submission)
+%%md
+## 9. Reflexión de ingeniería
+
+La reflexión que se califica se escribe en el portal y se guarda con tu artefacto. Si te sirve, haz aquí un borrador:
+- **Defensa del diseño:** ¿qué requisitos resolviste en el prompt y cuáles en código determinista? ¿Por qué ese reparto?
+- **Compromisos:** ¿qué te costaron los ejemplos, las reglas o el posprocesado (tokens, mantenimiento, flexibilidad)?
+- **Riesgos pendientes:** ¿qué documento malintencionado seguiría colándose, y qué lo detectaría?
+%%code
+reflection_draft = {"design_defense": "", "tradeoffs": "", "remaining_risks": ""}
+%%md
+## 10. Exportar el artefacto / resultado de finalización
+
+Exporta el artefacto **Manifiesto de prompt versionado y comparación de evaluaciones** e imprime un registro de finalización. Pega el registro en la página del Módulo 7 de agentic-ai.es (**Importar el resultado del laboratorio**). El registro es un documento del flujo de aprendizaje, no un certificado firmado.
+%%code
+artifact = fmse.export_artifact(LAB_ID, {"manifest": my_manifest, "evaluation_comparison": {"baseline_accuracy": baseline["accuracy"], "current_accuracy": result.evidence.get("public_accuracy")}},
+                     title="Manifiesto de prompt versionado y comparación de evaluaciones", fmt="json")
+record = fmse.make_completion_record(
+    LAB_ID,
+    result,
+    {"reflection_draft": reflection_draft, **{"baseline_accuracy": baseline["accuracy"]}},
+    artifact=artifact,
+    guided=guided,
+    probes=probe_results,
+)
+fmse.show_record(record)

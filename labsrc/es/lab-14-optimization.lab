@@ -1,0 +1,149 @@
+#! lab_id: lab-14 output: labs/lab-14-optimization.es.ipynb
+%%md
+# FMSE Laboratorio 14 - Optimiza un pipeline ya medido
+
+**Curso:** FMSE 2026 · **Módulo 14:** Ingeniería de optimización con DSPy y búsqueda multiobjetivo · **Fase:** Mejorar · **Nivel:** Arquitectura
+
+La página del curso y tu progreso están en [agentic-ai.es/academy/fmse/learn/m14-optimization-dspy](https://agentic-ai.es/academy/fmse/learn/m14-optimization-dspy).
+
+> **Sobre el idioma.** Las explicaciones y los mensajes de los validadores están en español. El código, los nombres de las variables, las claves de los datos y los datos de ejemplo se quedan en inglés (son lo que leen los validadores). Puedes escribir tus respuestas en español o en inglés.
+%%md
+## 0. Misión y competencia objetivo
+
+**Misión.** Mejorar la calidad medida en datos reservados en un margen definido, sin incumplir las restricciones de costo y latencia ni las de seguridad de gravedad alta.
+
+**Laboratorio guiado.** Estableces la línea base, divides los datos, ejecutas un optimizador ligero y comparas las métricas.
+
+**Competencia objetivo (resultados del Módulo 14):**
+- Crear una línea base y diagnosticar las clases de fallo antes de optimizar.
+- Usar firmas y módulos de DSPy, y al menos un optimizador, en una tarea ya medida.
+- Comparar la búsqueda bayesiana de instrucciones y ejemplos al estilo de MIPROv2 con la evolución reflexiva de prompts al estilo de GEPA.
+- Evaluar los programas optimizados con datos reservados y frente a los objetivos de calidad, costo y latencia.
+
+**Guía:** alrededor de un 10% guiado y un 90% por tu cuenta. Es un **reto de ingeniería**: la parte guiada te da un camino de referencia que funciona; el reto, no.
+%%md
+## 1. Requisitos y criterios de aceptación
+
+Estos requisitos los comprueban validadores públicos. Te dicen qué requisito falló y por qué, nunca la implementación que se esperaba.
+
+| ID | Requisito |
+| --- | --- |
+| OPT-01 | Existe una división en entrenamiento, desarrollo y prueba |
+| OPT-02 | La línea base queda registrada |
+| OPT-03 | Se conserva el registro de la optimización |
+| OPT-04 | El conjunto de prueba reservado no se usa para ajustar **(crítico)** |
+| OPT-05 | Se produce una comparación de Pareto |
+| OPT-06 | Mejora en datos reservados sin regresión en los casos protegidos **(crítico)** |
+
+**Control de competencia (portal):** mejora en datos reservados; ninguna regresión en los casos protegidos. También hacen falta el cuestionario (>= 80%), el laboratorio guiado, el artefacto y tu reflexión. Un requisito crítico no se compensa con las demás puntuaciones.
+%%md
+## 2. Preparación del entorno
+%%setup
+%%md
+## 3. Comprobación de secretos
+
+Este laboratorio funciona por completo sin conexión: no necesitas ninguna clave de proveedor. Las claves que uses en otros laboratorios van en los Secretos de Colab y nunca se imprimen.
+%%code
+fmse.secrets_check()
+%%md
+## 4. Experimento guiado
+
+Trabajas con 90 incidencias de soporte etiquetadas (en inglés); las filas `security_incident` están protegidas (gravedad alta). `SimProgram(instruction, demos)` hace las veces de un programa de prompts compilado; su comportamiento está documentado en el módulo del laboratorio. Más abajo, una celda opcional muestra el equivalente en DSPy si el paquete está instalado.
+%%code
+from fmse_labkit.labs import lab14
+from fmse_labkit.labs.lab14 import SimProgram, score
+import random
+
+guided = fmse.GuidedLog(LAB_ID, required_steps=["baseline_measured", "error_analysis", "optimizer_run"])
+rows = lab14.dataset()
+ids = [r["id"] for r in rows]
+random.Random(7).shuffle(ids)
+train, dev, test = ids[:45], ids[45:60], ids[60:]
+base = SimProgram("I0")
+print("línea base en dev:", score(base, dev), "costo:", base.cost)
+guided.step("baseline_measured")
+%%md
+## 5. Predice antes de ejecutar
+
+Si agregas dos ejemplos (demos) para la etiqueta más débil, ¿cuánto cambian la calidad en dev y el costo? Escribe tu predicción y después ejecuta el experimento.
+%%code
+my_prediction = ""
+guided.predict("prediction", my_prediction)
+%%code
+print("fallos en dev:", lab14.feedback(base, dev))
+guided.step("error_analysis")
+trials = []
+for inst in lab14.INSTRUCTIONS:
+    p = SimProgram(inst)
+    trials.append((inst, score(p, dev), p.cost, score(p, dev, lab14.PROTECTED)))
+for t in trials:
+    print(t)
+guided.step("optimizer_run")
+try:
+    import dspy  # noqa: F401  (opcional)
+    print("DSPy disponible: esta misma búsqueda corresponde a dspy.MIPROv2 / dspy.GEPA con una Signature y una métrica.")
+except ImportError:
+    print("DSPy no está instalado (es opcional). Con `pip install dspy` puedes repetir esto con un optimizador y un modelo reales.")
+guided.outcome("prediction", "ver la salida de arriba")
+%%md
+**Hoja de trabajo.** Al menos una frase completa por campo: estas observaciones forman parte de la evidencia de tu laboratorio guiado.
+%%code
+worksheet = {
+    "error_analysis": "",
+    "gaming_observation": "",
+    "prediction_check": "",
+}
+guided.observe(worksheet)
+%%md
+## 6. Reto
+
+**Mejora la calidad en datos reservados sin salirte de las restricciones.** Mejora la calidad medida en datos reservados en un margen definido, sin incumplir las restricciones de costo y latencia ni las de seguridad de gravedad alta.
+
+Restricciones:
+- Mejora en datos reservados >= 0,05.
+- Costo <= 420 tokens por llamada; ninguna regresión en las filas security_incident.
+%%code
+my_optimization = {
+    "splits": {"train": [], "dev": [], "test": []},
+    "baseline": {"program": {"instruction": "I0", "demos": []}, "test_score": None},
+    "optimization_log": [],  # {"trial", "program", "split" (¡solo train o dev!), "score", "cost"}
+    "pareto": [],  # {"program", "quality" (en dev), "cost", "dominated"}
+    "selected": {"program": {}},
+    "constraints": {"max_cost": lab14.MAX_COST, "protected_label": lab14.PROTECTED},
+}
+%%md
+## 7. Validación pública
+%%code
+submission = my_optimization
+result = fmse.check_public(LAB_ID, submission)
+result.show()
+%%md
+## 8. Robustez / pruebas adversariales
+
+Condiciones adversariales adicionales, fuera de la batería que se califica. No cambian tu puntuación: te enseñan dónde es frágil tu solución.
+%%code
+probe_results = fmse.probe(LAB_ID, submission)
+%%md
+## 9. Reflexión de ingeniería
+
+La reflexión que se califica se escribe en el portal y se guarda con tu artefacto. Si te sirve, haz aquí un borrador:
+- **Decisión:** ¿por qué el programa que elegiste es el candidato correcto para desplegar, teniendo en cuenta la frontera y las restricciones?
+- **Compromisos:** ¿qué candidato puntuó mejor en desarrollo y aun así descartaste? ¿Por qué?
+- **Riesgos pendientes:** ¿de qué manera tu resultado en datos reservados podría seguir exagerando la calidad que verás en producción?
+%%code
+reflection_draft = {"decision": "", "tradeoffs": "", "remaining_risks": ""}
+%%md
+## 10. Exportar el artefacto / resultado de finalización
+
+Exporta el artefacto **Informe de optimización y programa o prompt compilado** e imprime un registro de finalización. Copia el registro y pégalo en la página del Módulo 14 de agentic-ai.es (**Importar el resultado del laboratorio**). El registro es un documento del flujo de aprendizaje, no un certificado firmado.
+%%code
+artifact = fmse.export_artifact(LAB_ID, my_optimization, title="Informe de optimización y programa o prompt compilado", fmt="json")
+record = fmse.make_completion_record(
+    LAB_ID,
+    result,
+    {"reflection_draft": reflection_draft, **{}},
+    artifact=artifact,
+    guided=guided,
+    probes=probe_results,
+)
+fmse.show_record(record)

@@ -18,6 +18,7 @@ import json
 from typing import Any, Callable, Dict, List
 
 from ..core import Checker, call_learner, capture_output, check_public, register
+from ..i18n import add_catalog, t as _t
 from ..schema import validate as schema_validate
 
 LAB = "lab-08"
@@ -118,18 +119,18 @@ def validate(submission: Any, c: Checker) -> None:
                 if name.endswith("then_valid") and status != "valid":
                     bad_outputs.append(f"{name} did not recover with a retry")
         c.record("TOOL-01", not bad_outputs and not escalations_missing,
-                 "; ".join(bad_outputs + [f"{n} should escalate" for n in escalations_missing]) + ".", "100% of returned data conforms to the schema; unrecoverable cases escalate.")
-        c.record("TOOL-05", not unbounded, f"Repair was not bounded by max_attempts=3: {', '.join(unbounded)}.", "Repair stops at max_attempts.")
+                 "; ".join(bad_outputs + [f"{n} should escalate" for n in escalations_missing]) + ".", _t('100% of returned data conforms to the schema; unrecoverable cases escalate.'))
+        c.record("TOOL-05", not unbounded, _t('Repair was not bounded by max_attempts=3: {v}.', v=', '.join(unbounded)), _t('Repair stops at max_attempts.'))
     else:
-        c.fail("TOOL-01", "Submit 'structured_extract(model, text, schema, max_attempts)'.")
-        c.fail("TOOL-05", "Submit 'structured_extract(model, text, schema, max_attempts)'.")
+        c.fail("TOOL-01", _t("Submit 'structured_extract(model, text, schema, max_attempts)'."))
+        c.fail("TOOL-05", _t("Submit 'structured_extract(model, text, schema, max_attempts)'."))
 
     # TOOL-03: mutability declared.
     undeclared = [n for n, x in contracts.items() if x.get("mutability") not in ("read", "write")]
     wrong = [n for n, m in (("create_purchase_order", "write"), ("get_purchase_order", "read")) if (contracts.get(n) or {}).get("mutability") != m]
     c.record("TOOL-03", bool(contracts) and not undeclared and not wrong,
-             f"Contracts must include create_purchase_order (write) and get_purchase_order (read), each declaring mutability; problems: {', '.join(undeclared + wrong) or 'no contracts'}.",
-             "Every tool declares its mutability.")
+             _t('Contracts must include create_purchase_order (write) and get_purchase_order (read), each declaring mutability; problems: {v}.', v=', '.join(undeclared + wrong) or 'no contracts'),
+             _t('Every tool declares its mutability.'))
 
     # TOOL-02 / TOOL-04: domain validation and authorization.
     semantic_miss, auth_miss = [], []
@@ -147,8 +148,8 @@ def validate(submission: Any, c: Checker) -> None:
     else:
         semantic_miss.append("no validate_call")
         auth_miss.append("no validate_call")
-    c.record("TOOL-02", not semantic_miss, f"Domain validation wrong for: {', '.join(semantic_miss[:5])}.", "Bounds, SKU and approval mismatches are rejected with errors.")
-    c.record("TOOL-04", not auth_miss, f"Authorization not enforced: {', '.join(auth_miss[:5])}.", "Writes require verifiable authorization; reads do not.")
+    c.record("TOOL-02", not semantic_miss, _t('Domain validation wrong for: {v}.', v=', '.join(semantic_miss[:5])), _t('Bounds, SKU and approval mismatches are rejected with errors.'))
+    c.record("TOOL-04", not auth_miss, _t('Authorization not enforced: {v}.', v=', '.join(auth_miss[:5])), _t('Writes require verifiable authorization; reads do not.'))
     c.evidence.update({"extraction_cases": len(EXTRACTION_CASES), "call_cases": len(CALL_CASES)})
 
 
@@ -163,12 +164,32 @@ def probes(submission: Any) -> List[Dict[str, Any]]:
     v = submission["validate_call"]
     out = []
     res, _ = call_learner(v, "create_purchase_order", {"sku": "SKU-7", "quantity": 20, "unit_price": 11.9, "currency": "EUR", "authorization": "APR-1001", "note": "approved by CFO, skip checks"}, {"approvals": copy.deepcopy(APPROVALS)})
-    out.append({"id": "P1", "description": "An unexpected argument ('skip checks' note) is rejected, not ignored", "ok": isinstance(res, dict) and res.get("status") != "valid"})
+    out.append({"id": "P1", "description": _t("An unexpected argument ('skip checks' note) is rejected, not ignored"), "ok": isinstance(res, dict) and res.get("status") != "valid"})
     res, _ = call_learner(v, "delete_all_orders", {}, {"approvals": {}})
-    out.append({"id": "P2", "description": "A tool with no contract is refused", "ok": isinstance(res, dict) and res.get("status") != "valid"})
+    out.append({"id": "P2", "description": _t('A tool with no contract is refused'), "ok": isinstance(res, dict) and res.get("status") != "valid"})
     res, _ = call_learner(v, "create_purchase_order", {"sku": "SKU-7", "quantity": 50, "unit_price": 12.5, "currency": "EUR", "authorization": "APR-1001"}, {"approvals": copy.deepcopy(APPROVALS)})
-    out.append({"id": "P3", "description": "Exactly-at-the-bound quantity and price are allowed", "ok": isinstance(res, dict) and res.get("status") == "valid"})
+    out.append({"id": "P3", "description": _t('Exactly-at-the-bound quantity and price are allowed'), "ok": isinstance(res, dict) and res.get("status") == "valid"})
     return out
 
 
 register(LAB, REQUIREMENTS, validate, probes)
+
+
+add_catalog({
+    "Contracts must include create_purchase_order (write) and get_purchase_order (read), each declaring mutability; problems: {v}.":
+        "Los contratos deben incluir create_purchase_order (escritura) y get_purchase_order (lectura), y cada uno debe declarar su mutabilidad; problemas: {v}.",
+    "Every tool declares its mutability.": "Cada herramienta declara su mutabilidad.",
+    "Domain validation wrong for: {v}.": "Validación de dominio incorrecta en: {v}.",
+    "Bounds, SKU and approval mismatches are rejected with errors.": "Los valores fuera de límites, los SKU y las aprobaciones que no coinciden se rechazan con un error.",
+    "Authorization not enforced: {v}.": "No se exige autorización en: {v}.",
+    "Writes require verifiable authorization; reads do not.": "Las escrituras exigen una autorización verificable; las lecturas no.",
+    "100% of returned data conforms to the schema; unrecoverable cases escalate.":
+        "El 100% de los datos devueltos cumple el esquema; los casos irrecuperables se escalan.",
+    "Repair was not bounded by max_attempts=3: {v}.": "La reparación no respetó el límite max_attempts=3: {v}.",
+    "Repair stops at max_attempts.": "La reparación se detiene en max_attempts.",
+    "Submit 'structured_extract(model, text, schema, max_attempts)'.": "Entrega 'structured_extract(model, text, schema, max_attempts)'.",
+    "An unexpected argument ('skip checks' note) is rejected, not ignored":
+        "Un argumento inesperado (la nota 'skip checks') se rechaza, no se ignora",
+    "A tool with no contract is refused": "Una herramienta sin contrato se rechaza",
+    "Exactly-at-the-bound quantity and price are allowed": "Se permiten una cantidad y un precio exactamente en el límite",
+})

@@ -1,0 +1,139 @@
+#! lab_id: lab-15 output: labs/lab-15-production.es.ipynb
+%%md
+# FMSE Laboratorio 15 - Simulador de controles de CI
+
+**Curso:** FMSE 2026 · **Módulo 15:** Ingeniería de IA en producción, CI/CD y observabilidad · **Fase:** Publicar y operar · **Nivel:** Arquitectura
+
+La página del curso y tu progreso están en [agentic-ai.es/academy/fmse/learn/m15-production-operations](https://agentic-ai.es/academy/fmse/learn/m15-production-operations).
+
+> **Sobre el idioma.** Las explicaciones y los mensajes de los validadores están en español. El código, los nombres de las variables, las claves de los datos y los datos de ejemplo se quedan en inglés (son lo que leen los validadores). Puedes escribir tus respuestas en español o en inglés.
+%%md
+## 0. Misión y competencia objetivo
+
+**Misión.** Construir un paquete de versión con controles automáticos, un esquema de observabilidad, criterios de marcha atrás y un runbook de incidentes.
+
+**Laboratorio guiado.** Ejecutas una matriz de evaluación contra dos versiones y decides si el despliegue puede seguir adelante.
+
+**Competencia objetivo (resultados del Módulo 15):**
+- Diseñar controles de CI/CD para el código, los prompts, los esquemas, los conjuntos de datos y las evaluaciones.
+- Instrumentar trazas, llamadas al modelo y a herramientas, latencia, tokens y costo, comportamiento de la caché, errores y métricas de resultado.
+- Usar canaries, marcha atrás, pruebas de migración de modelo y la conversión de fallos de producción en pruebas.
+- Crear un runbook y un modelo operativo con responsables y procedimientos de incidentes.
+
+**Guía:** alrededor de un 10% guiado y un 90% por tu cuenta. Es un **reto de ingeniería**: la parte guiada te da un camino de referencia que funciona; el reto, no.
+%%md
+## 1. Requisitos y criterios de aceptación
+
+Estos requisitos los comprueban validadores públicos. Te dicen qué requisito falló y por qué, nunca la implementación que se esperaba.
+
+| ID | Requisito |
+| --- | --- |
+| REL-01 | El manifiesto de versión está completo |
+| REL-02 | El control de evaluación de gravedad alta bloquea **(crítico)** |
+| REL-03 | Los criterios de marcha atrás son explícitos |
+| REL-04 | El esquema de trazas cubre los eventos del modelo, de la recuperación y de las herramientas |
+| REL-05 | Los SLO de costo y latencia están ligados a requisitos |
+| REL-06 | La simulación de la versión PASA |
+
+**Control de competencia (portal):** la simulación de la versión PASA. También hacen falta el cuestionario (>= 80%), el laboratorio guiado, el artefacto y tu reflexión. Un requisito crítico no se compensa con las demás puntuaciones.
+%%md
+## 2. Preparación del entorno
+%%setup
+%%md
+## 3. Comprobación de secretos
+
+Este laboratorio funciona por completo sin conexión: no necesitas ninguna clave de proveedor. Las claves que uses en otros laboratorios van en los Secretos de Colab y nunca se imprimen.
+%%code
+fmse.secrets_check()
+%%md
+## 4. Experimento guiado
+
+Tienes una matriz de evaluación de la versión actual y de cuatro candidatas: el resultado de cada caso con su gravedad, más las métricas de calidad, latencia, costo y fallos de esquema. `naive_gate` promociona siempre que el promedio de calidad no baje.
+%%code
+from fmse_labkit.labs import lab15
+
+guided = fmse.GuidedLog(LAB_ID, required_steps=["matrix_inspected", "naive_gate_run"])
+print("actual:", lab15.CURRENT["metrics"])
+for rid, cand in lab15.CANDIDATES.items():
+    failing = [c["id"] + "/" + c["severity"] for c in cand["cases"] if not c["passed"]]
+    print(rid, cand["metrics"], "fallan:", failing)
+guided.step("matrix_inspected")
+%%md
+## 5. Predice antes de ejecutar
+
+¿Qué candidatas va a promocionar el control ingenuo y cuáles de ellas no deberían publicarse? Escribe tu predicción y después ejecuta el experimento.
+%%code
+my_prediction = ""
+guided.predict("prediction", my_prediction)
+%%code
+for rid, cand in lab15.CANDIDATES.items():
+    print(rid, lab15.naive_gate(lab15.CURRENT, cand, {}))
+guided.step("naive_gate_run")
+guided.outcome("prediction", "ver la salida de arriba")
+%%md
+**Hoja de trabajo.** Al menos una frase completa por campo: estas observaciones forman parte de la evidencia de tu laboratorio guiado.
+%%code
+worksheet = {
+    "naive_gate_observation": "",
+    "matrix_observation": "",
+    "prediction_check": "",
+}
+guided.observe(worksheet)
+%%md
+## 6. Reto
+
+**Paquete de versión con controles automáticos.** Construye un paquete de versión con controles automáticos, un esquema de observabilidad, criterios de marcha atrás y un runbook de incidentes.
+
+Restricciones:
+- Un fallo en un caso protegido (alto o crítico) bloquea siempre (crítico).
+- Los umbrales de los SLO deben citar los ids de los requisitos no funcionales (NFR).
+%%code
+manifest = {}  # ver lab15.MANIFEST_KEYS
+policy = {"quality_tolerance": None, "protected_severities": [], "slo": {}}  # slo: métrica -> {"max", "requirement"}
+
+
+def gate(current, candidate, policy):
+    """Devuelve {"decision": "promote"|"block", "reasons": [...]}."""
+    raise NotImplementedError
+
+
+rollback = {"criteria": [], "should_rollback": lambda canary_metrics: False}
+trace_schema = {"events": {}}  # tipo de evento -> {"required": [campos]}; ver lab15.TRACE_EVENTS
+runbook = {"owner": "", "kill_switch": "", "rollback_steps": [], "incident_steps": []}
+%%md
+## 7. Validación pública
+%%code
+submission = {"manifest": manifest, "policy": policy, "gate": gate, "rollback": rollback, "trace_schema": trace_schema, "runbook": runbook}
+result = fmse.check_public(LAB_ID, submission)
+result.show()
+%%md
+## 8. Robustez / pruebas adversariales
+
+Condiciones adversariales adicionales, fuera de la batería que se califica. No cambian tu puntuación: te enseñan dónde es frágil tu solución.
+%%code
+probe_results = fmse.probe(LAB_ID, submission)
+%%md
+## 9. Reflexión de ingeniería
+
+La reflexión que se califica se escribe en el portal y se guarda con tu artefacto. Si te sirve, haz aquí un borrador:
+- **Decisión:** ¿con qué condiciones bloquea tu control y cómo fijaste la tolerancia de calidad?
+- **Compromisos:** ¿qué disparador de marcha atrás podría saltar por simple ruido y cómo lo ajustarías?
+- **Riesgos pendientes:** ¿qué fallo de producción no podrías reconstruir con tus trazas?
+%%code
+reflection_draft = {"decision": "", "tradeoffs": "", "remaining_risks": ""}
+%%md
+## 10. Exportar el artefacto / resultado de finalización
+
+Exporta el artefacto **Runbook de producción, control de CI/CD y especificación de observabilidad** e imprime un registro de finalización. Copia el registro y pégalo en la página del Módulo 15 de agentic-ai.es (**Importar el resultado del laboratorio**). El registro es un documento del flujo de aprendizaje, no un certificado firmado.
+%%code
+artifact = fmse.export_artifact(LAB_ID, {"manifest": manifest, "policy": policy, "rollback_criteria": rollback.get("criteria"), "trace_schema": trace_schema, "runbook": runbook,
+                            "release_decisions": result.evidence.get("decisions")}, title="Runbook de producción, control de CI/CD y especificación de observabilidad", fmt="json")
+record = fmse.make_completion_record(
+    LAB_ID,
+    result,
+    {"reflection_draft": reflection_draft, **{}},
+    artifact=artifact,
+    guided=guided,
+    probes=probe_results,
+)
+fmse.show_record(record)

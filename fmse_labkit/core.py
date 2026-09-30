@@ -19,6 +19,7 @@ from dataclasses import asdict, dataclass, field
 from typing import Any, Callable, Dict, List, Optional
 
 from . import COURSE_ID, COURSE_VERSION
+from .i18n import add_catalog, t
 
 STATUSES = ("pass", "fail", "warn")
 
@@ -61,18 +62,18 @@ class CheckResult:
 
     def show(self) -> "CheckResult":
         """Print requirement-oriented feedback. Status is spelled out, never colour-only."""
-        verdict = "PASSED" if self.passed else "NOT PASSED"
-        print(f"{self.lab_id}: {verdict} - score {self.score:.0%} (gate {self.public_gate:.0%})")
+        verdict = t("PASSED") if self.passed else t("NOT PASSED")
+        print(t("{lab}: {verdict} - score {score} (gate {gate})", lab=self.lab_id, verdict=verdict, score=f"{self.score:.0%}", gate=f"{self.public_gate:.0%}"))
         for c in self.checks:
-            label = c.status.upper()
-            crit = " [critical]" if c.critical else ""
-            print(f"  {label:<4}  {c.id:<7} {c.dimension}{crit}: {c.message}")
+            label = t(c.status.upper())
+            crit = t(" [critical]") if c.critical else ""
+            print(f"  {label:<4}  {c.id:<7} {t(c.dimension)}{crit}: {c.message}")
             if c.status != "pass" and c.hint:
-                print(f"        Hint: {c.hint}")
+                print(t("        Hint: {hint}", hint=c.hint))
         if not self.passed:
             critical_failed = [c.id for c in self.checks if c.critical and c.status == "fail"]
             if critical_failed:
-                print(f"  Critical requirement(s) failed: {', '.join(critical_failed)}. A critical gate cannot be offset by other scores.")
+                print(t("  Critical requirement(s) failed: {ids}. A critical gate cannot be offset by other scores.", ids=", ".join(critical_failed)))
         return self
 
     def _repr_pretty_(self, p, cycle):  # IPython display without colour dependence
@@ -154,12 +155,13 @@ class Checker:
         self.checks: Dict[str, Check] = {}
         self.evidence: Dict[str, Any] = {}
 
-    def record(self, req_id: str, ok: bool, fail: str, ok_msg: str = "Requirement met.", warn: bool = False) -> bool:
+    def record(self, req_id: str, ok: bool, fail: str, ok_msg: Optional[str] = None, warn: bool = False) -> bool:
         text, dimension, critical, hint = self.spec.requirements[req_id]
         if req_id in self.checks and self.checks[req_id].status == "fail":
             return False  # first failure wins; keep the most specific message
         status = "pass" if ok else ("warn" if warn else "fail")
-        self.checks[req_id] = Check(req_id, status, dimension, ok_msg if ok else fail, None if ok else hint, critical)
+        message = (ok_msg if ok_msg is not None else t("Requirement met.")) if ok else fail
+        self.checks[req_id] = Check(req_id, status, dimension, message, None if ok else t(hint), critical)
         return ok
 
     def fail(self, req_id: str, message: str) -> bool:
@@ -179,11 +181,11 @@ def call_learner(fn, *args, **kwargs):
     try:
         return fn(*args, **kwargs), None
     except NotImplementedError:
-        return None, "the function is not implemented yet (raises NotImplementedError)"
+        return None, t("the function is not implemented yet (raises NotImplementedError)")
     except Exception as exc:  # noqa: BLE001 - validators must fail safely
         last = traceback.extract_tb(exc.__traceback__)[-1:] if exc.__traceback__ else []
-        where = f" (line {last[0].lineno})" if last else ""
-        return None, f"raised {type(exc).__name__}: {str(exc)[:200]}{where}"
+        where = t(" (line {n})", n=last[0].lineno) if last else ""
+        return None, t("raised {name}: {msg}", name=type(exc).__name__, msg=str(exc)[:200]) + where
 
 
 def check_public(lab_id: str, submission: Any) -> CheckResult:
@@ -197,10 +199,10 @@ def check_public(lab_id: str, submission: Any) -> CheckResult:
     except Exception as exc:  # noqa: BLE001 - a validator bug must not look like a learner pass
         for rid in spec.requirements:
             if rid not in checker.checks:
-                checker.fail(rid, f"Could not evaluate this requirement: submission raised {type(exc).__name__}: {str(exc)[:160]}")
+                checker.fail(rid, t("Could not evaluate this requirement: submission raised {name}: {msg}", name=type(exc).__name__, msg=str(exc)[:160]))
     for rid in spec.requirements:  # any requirement the validator did not reach is a failure
         if rid not in checker.checks:
-            checker.fail(rid, "Not evaluated: an earlier structural problem prevented this check.")
+            checker.fail(rid, t("Not evaluated: an earlier structural problem prevented this check."))
     ordered = [checker.checks[r] for r in spec.requirements]
     passed_n = sum(1 for c in ordered if c.status in ("pass", "warn"))
     score = passed_n / len(ordered) if ordered else 0.0
@@ -216,9 +218,58 @@ def probe(lab_id: str, submission: Any) -> List[Dict[str, Any]]:
         return []
     results = spec.prober(submission)
     for r in results:
-        label = "HOLDS" if r.get("ok") else "VIOLATED"
+        label = t("HOLDS") if r.get("ok") else t("VIOLATED")
         print(f"  {label:<8} {r['id']}: {r['description']}")
     return results
+
+
+def title(spec: LabSpec) -> str:
+    """The lab title in the active language."""
+    return t(spec.title)
+
+
+add_catalog({
+    "PASSED": "APROBADO",
+    "NOT PASSED": "NO APROBADO",
+    "{lab}: {verdict} - score {score} (gate {gate})": "{lab}: {verdict} - puntuación {score} (umbral {gate})",
+    "PASS": "PASA",
+    "FAIL": "FALLA",
+    "WARN": "AVISO",
+    " [critical]": " [crítico]",
+    "        Hint: {hint}": "        Pista: {hint}",
+    "  Critical requirement(s) failed: {ids}. A critical gate cannot be offset by other scores.":
+        "  Fallan requisitos críticos: {ids}. Un control crítico no se compensa con las demás puntuaciones.",
+    "Requirement met.": "Requisito cumplido.",
+    "the function is not implemented yet (raises NotImplementedError)": "la función todavía no está implementada (lanza NotImplementedError)",
+    " (line {n})": " (línea {n})",
+    "raised {name}: {msg}": "lanzó {name}: {msg}",
+    "Could not evaluate this requirement: submission raised {name}: {msg}": "No se pudo evaluar este requisito: la entrega lanzó {name}: {msg}",
+    "Not evaluated: an earlier structural problem prevented this check.": "No evaluado: un problema estructural previo impidió esta comprobación.",
+    "HOLDS": "SE CUMPLE",
+    "VIOLATED": "NO SE CUMPLE",
+    # Check dimensions, as shown in validator output.
+    "correctness": "corrección", "schema": "esquema", "robustness": "robustez", "security": "seguridad", "cost": "costo",
+    "latency": "latencia", "groundedness": "fundamentación", "tool_behavior": "uso de herramientas", "traceability": "trazabilidad",
+    "completeness": "completitud", "reproducibility": "reproducibilidad", "operations": "operación",
+    # Lab titles (content/fmse/i18n/es/modules/*/module.yaml lab.title).
+    "Task Framing Laboratory": "Laboratorio de planteamiento de tareas",
+    "Build a Typed Model Call": "Construye una llamada tipada a un modelo",
+    "ConOps Builder": "Constructor de ConOps",
+    "Requirements and AI-FMEA Workbench": "Banco de trabajo de requisitos y AI-FMEA",
+    "Model Profiler": "Perfilador de modelos",
+    "RAG from First Principles": "RAG desde los principios básicos",
+    "Architecture Trade Study Workbench": "Banco de trabajo de estudios de alternativas de arquitectura",
+    "Prompt Manifest Laboratory": "Laboratorio de manifiestos de prompt",
+    "Typed Extraction and Tool Contract": "Extracción tipada y contrato de herramienta",
+    "Context Budget Optimizer": "Optimizador del presupuesto de contexto",
+    "Safe Tool-Using Agent": "Agente seguro que usa herramientas",
+    "Multimodal Document Verification": "Verificación multimodal de documentos",
+    "Evaluation Harness": "Banco de evaluación",
+    "Break the Agent": "Rompe el agente",
+    "Optimize a Measured Pipeline": "Optimiza un pipeline ya medido",
+    "CI Gate Simulator": "Simulador de controles de CI",
+    "Capstone Studio": "Estudio del proyecto final",
+})
 
 
 __all__ = [
@@ -233,6 +284,7 @@ __all__ = [
     "lab_spec",
     "probe",
     "register",
+    "title",
     "COURSE_ID",
     "COURSE_VERSION",
 ]

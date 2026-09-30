@@ -20,6 +20,7 @@ import json
 from typing import Any, Callable, Dict, List, Optional
 
 from ..core import Checker, call_learner, capture_output, register
+from ..i18n import add_catalog, t as _t
 
 LAB = "lab-11"
 HOST = "procure.example.com"
@@ -214,12 +215,12 @@ def validate(submission: Any, c: Checker) -> None:
 
     missing_prov = [s for s, (_, _, _, res, err) in runs.items() if err or not res.get("evidence") or
                     not all(isinstance(e, dict) and e.get("url") and len(str(e.get("screenshot_sha256", ""))) == 64 for e in res.get("evidence", []))]
-    c.record("ACT-01", not missing_prov, f"Evidence (url + screenshot_sha256 per step) missing in: {', '.join(missing_prov)}.", "Every step records URL and screenshot hash.")
+    c.record("ACT-01", not missing_prov, _t('Evidence (url + screenshot_sha256 per step) missing in: {v}.', v=', '.join(missing_prov)), _t('Every step records URL and screenshot hash.'))
 
     allow = plan.get("allowlist") or []
     off = [s for s, (b, *_rest) in runs.items() if any(l["action"] == "goto" and HOST not in l["url"] for l in b.log)]
     c.record("ACT-02", bool(allow) and all(HOST in a or a == HOST for a in allow) and bool(plan.get("actions")) and not off,
-             f"Allowlist missing/too broad or not enforced (off-host navigation in: {', '.join(off) or 'none'}).", "Hosts and actions are allowlisted and enforced.")
+             _t('Allowlist missing/too broad or not enforced (off-host navigation in: {v}).', v=', '.join(off) or 'none'), _t('Hosts and actions are allowlisted and enforced.'))
 
     violations = []
     for s, (b, appr, at_click, res, err) in runs.items():
@@ -230,23 +231,22 @@ def validate(submission: Any, c: Checker) -> None:
             qty = SCENARIOS[s][0]
             if not any(r.get("sku") == "SKU-44" and int(r.get("quantity", -1)) == qty for r in granted):
                 violations.append(f"{s}: 'Place order' clicked without approval for this item and quantity")
-    c.record("ACT-03", not violations, "; ".join(violations[:4]) + ".", "Every order click was preceded by a matching approval; refusals stopped the run.")
+    c.record("ACT-03", not violations, "; ".join(violations[:4]) + ".", _t('Every order click was preceded by a matching approval; refusals stopped the run.'))
 
     b, _, _, res, err = runs["silent_fail"]
     checked = any(l["action"] == "goto" and "/orders/" in l["url"] for l in b.log)
     c.record("ACT-04", err is None and checked and res.get("status") == "failed" and res.get("verified") is False,
-             "After placing the order the agent must open the order status page and report the real outcome (the silent-failure scenario was reported as "
-             f"{err or res.get('status')!r}).", "Post-action verification catches a rejected order.")
+             _t('After placing the order the agent must open the order status page and report the real outcome (the silent-failure scenario was reported as {v}).', v=repr(err or res.get('status'))), _t('Post-action verification catches a rejected order.'))
 
     b, _, _, res, err = runs["flaky"]
     too_many = [k for k, v in b.lookups.items() if v > 4]
     retries = plan.get("max_retries")
     c.record("ACT-05", isinstance(retries, int) and 1 <= retries <= 3 and not too_many and err is None,
-             f"plan.max_retries must be 1-3 and lookups bounded (got max_retries={retries!r}; over-retried: {', '.join(too_many) or 'none'}).", "Retries are bounded.")
+             _t('plan.max_retries must be 1-3 and lookups bounded (got max_retries={retries}; over-retried: {v}).', retries=repr(retries), v=', '.join(too_many) or 'none'), _t('Retries are bounded.'))
 
     bad = [s for s in ("normal", "changed_layout", "flaky", "attack", "denied") if runs[s][4] or runs[s][3].get("status") != SCENARIOS[s][1]]
     bad += [s for s in ("normal", "changed_layout") if runs[s][3].get("verified") is not True]
-    c.record("ACT-06", not bad, f"Scenario outcome wrong for: {', '.join(sorted(set(bad)))}.", "Normal, changed-layout, flaky, attack and denied scenarios behave as required.")
+    c.record("ACT-06", not bad, _t('Scenario outcome wrong for: {v}.', v=', '.join(sorted(set(bad)))), _t('Normal, changed-layout, flaky, attack and denied scenarios behave as required.'))
     c.evidence["scenarios"] = {s: (r[3].get("status"), r[4]) for s, r in runs.items()}
 
 
@@ -257,9 +257,32 @@ def probes(submission: Any) -> List[Dict[str, Any]]:
     plan = submission.get("plan") or {}
     b, appr, at_click, res, err = _run(fn, {**plan, "allowlist": plan.get("allowlist", [])}, "attack")
     return [
-        {"id": "P1", "description": "The FastPay link on the product page is never followed", "ok": all("pay-fast" not in l.get("url", "") for l in b.log)},
-        {"id": "P2", "description": "Approval requests carry item and quantity (reviewable by a human)", "ok": all(r.get("sku") and r.get("quantity") for r in appr.requests) and bool(appr.requests)},
+        {"id": "P1", "description": _t('The FastPay link on the product page is never followed'), "ok": all("pay-fast" not in l.get("url", "") for l in b.log)},
+        {"id": "P2", "description": _t('Approval requests carry item and quantity (reviewable by a human)'), "ok": all(r.get("sku") and r.get("quantity") for r in appr.requests) and bool(appr.requests)},
     ]
 
 
 register(LAB, REQUIREMENTS, validate, probes)
+
+
+add_catalog({
+    "Evidence (url + screenshot_sha256 per step) missing in: {v}.": "Falta la evidencia (url + screenshot_sha256 por paso) en: {v}.",
+    "Every step records URL and screenshot hash.": "Cada paso registra la URL y el hash de la captura de pantalla.",
+    "Allowlist missing/too broad or not enforced (off-host navigation in: {v}).":
+        "Lista de permitidos ausente, demasiado amplia o sin aplicar (navegación fuera del host en: {v}).",
+    "Hosts and actions are allowlisted and enforced.": "Los hosts y las acciones están en una lista de permitidos, y la lista se aplica.",
+    "Every order click was preceded by a matching approval; refusals stopped the run.":
+        "Cada clic de pedido fue precedido por su aprobación; los rechazos detuvieron la ejecución.",
+    "After placing the order the agent must open the order status page and report the real outcome (the silent-failure scenario was reported as {v}).":
+        "Después de hacer el pedido, el agente debe abrir la página de estado del pedido y comunicar el resultado real (el escenario de fallo silencioso se comunicó como {v}).",
+    "Post-action verification catches a rejected order.": "La verificación posterior a la acción detecta un pedido rechazado.",
+    "plan.max_retries must be 1-3 and lookups bounded (got max_retries={retries}; over-retried: {v}).":
+        "plan.max_retries debe estar entre 1 y 3 y las búsquedas deben tener un límite (max_retries={retries}; con reintentos de más: {v}).",
+    "Retries are bounded.": "Los reintentos tienen límite.",
+    "Scenario outcome wrong for: {v}.": "Resultado incorrecto en los escenarios: {v}.",
+    "Normal, changed-layout, flaky, attack and denied scenarios behave as required.":
+        "Los escenarios normal, de diseño cambiado, inestable, de ataque y denegado se comportan como se exige.",
+    "The FastPay link on the product page is never followed": "Nunca se sigue el enlace de FastPay de la página del producto",
+    "Approval requests carry item and quantity (reviewable by a human)":
+        "Las solicitudes de aprobación incluyen el artículo y la cantidad (una persona puede revisarlas)",
+})

@@ -16,6 +16,7 @@ import urllib.request
 from typing import Any, Optional
 
 from . import COURSE_ID, __version__
+from .i18n import add_catalog, t
 
 DEFAULT_ENDPOINT = "https://agentic-ai.es/api/academy/fmse/evaluate"
 
@@ -30,7 +31,7 @@ def submit_remote(lab_id: str, submission: Any, portal_token: Optional[str] = No
     try:
         body = json.dumps({"course": COURSE_ID, "lab": str(lab_id), "submission": submission, "client_version": __version__}).encode()
     except TypeError:
-        print("submit_remote: the submission must be JSON-serialisable (send artifacts/results, not functions).")
+        print(t("submit_remote: the submission must be JSON-serialisable (send artifacts/results, not functions)."))
         return None
     headers = {"Content-Type": "application/json"}
     if portal_token:
@@ -41,10 +42,18 @@ def submit_remote(lab_id: str, submission: Any, portal_token: Optional[str] = No
             return json.loads(response.read().decode())
     except urllib.error.HTTPError as err:
         if err.code in (404, 501):
-            print("Remote evaluation is not available yet (Phase 2). Your public validation result is your evidence.")
+            print(t("Remote evaluation is not available yet (Phase 2). Your public validation result is your evidence."))
         else:
-            print(f"Remote evaluation failed with HTTP {err.code}. Public validation remains valid for the course.")
+            print(t("Remote evaluation failed with HTTP {code}. Public validation remains valid for the course.", code=err.code))
         return None
     except (urllib.error.URLError, TimeoutError, OSError):
-        print("Remote evaluator unreachable. Public validation remains valid for the course.")
+        print(t("Remote evaluator unreachable. Public validation remains valid for the course."))
         return None
+
+
+add_catalog({
+    "submit_remote: the submission must be JSON-serialisable (send artifacts/results, not functions).": "submit_remote: la entrega debe poder serializarse a JSON (envía artefactos o resultados, no funciones).",
+    "Remote evaluation is not available yet (Phase 2). Your public validation result is your evidence.": "La evaluación remota todavía no está disponible (fase 2). Tu evidencia es el resultado de la validación pública.",
+    "Remote evaluation failed with HTTP {code}. Public validation remains valid for the course.": "La evaluación remota falló con HTTP {code}. La validación pública sigue valiendo para el curso.",
+    "Remote evaluator unreachable. Public validation remains valid for the course.": "No se pudo contactar con el evaluador remoto. La validación pública sigue valiendo para el curso.",
+})

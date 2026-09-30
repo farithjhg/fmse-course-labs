@@ -18,7 +18,8 @@ import re
 from typing import Any, Dict, List
 
 from ..core import Checker, check_public, register
-from ..textutil import as_items, first, has_number, parse_document, text_of
+from ..i18n import add_catalog, t as _t
+from ..textutil import as_items, first, has_number, mentions, parse_document, text_of
 
 LAB = "lab-02"
 
@@ -43,7 +44,11 @@ CHALLENGE_REQUEST = (
 SOLUTION_TERMS = re.compile(
     r"\b((an?|the|our)\s+(ai\s+|autonomous\s+|software\s+|intelligent\s+)?agent\b|ai\s+agents?|agentic|chat\s*bots?|(ai|virtual)\s+assistants?|copilot|llms?|large language models?|gpt[\w.-]*|gemini|claude|"
     r"rag|retrieval[- ]augmented|vector (database|store|db)|embeddings?|fine[- ]?tun\w*|prompts?|neural|machine learning model|"
-    r"(use|using|with|via|build|deploy)\s+(an?\s+)?(ai|genai|generative ai)\b|ai[- ]powered|ai model)",
+    r"(use|using|with|via|build|deploy)\s+(an?\s+)?(ai|genai|generative ai)\b|ai[- ]powered|ai model|"
+    # Spanish
+    r"(un|el|nuestro)\s+agente\b|agentes? (de|con) ia|agentic[oa]s?|asistentes? (virtual(es)?|de ia|inteligentes?)|modelos? (de lenguaje|de ia)|"
+    r"base de datos vectorial|recuperaci[oó]n aumentada|ajuste fino|redes? neuronal(es)?|modelo de aprendizaje autom[aá]tico|"
+    r"(usar|usando|con|mediante|construir|desplegar)\s+(una?\s+)?(ia|ia generativa)\b|basad[oa] en ia|impulsad[oa] por ia)",
     re.I,
 )
 
@@ -102,36 +107,36 @@ def validate(submission: Any, c: Checker) -> None:
     words = len(problem.split())
     hit = SOLUTION_TERMS.search(problem)
     if words < 15:
-        c.fail("CON-01", f"The problem statement has {words} words; it needs to describe the pain, who has it, and the consequence.")
+        c.fail("CON-01", _t('The problem statement has {words} words; it needs to describe the pain, who has it, and the consequence.', words=words))
     else:
-        c.record("CON-01", hit is None, f"The problem statement presupposes a solution (\"{hit.group(0) if hit else ''}\").",
-                 "The problem statement describes the need without prescribing a solution.")
+        c.record("CON-01", hit is None, _t('The problem statement presupposes a solution ("{v}").', v=hit.group(0) if hit else ''),
+                 _t('The problem statement describes the need without prescribing a solution.'))
 
     groups = _stakeholder_groups(doc)
-    c.record("CON-02", len(groups) >= 3, f"Found {len(groups)} distinct stakeholder group(s); at least 3 are required.",
-             f"{len(groups)} stakeholder groups identified.")
+    c.record("CON-02", len(groups) >= 3, _t('Found {n_groups} distinct stakeholder group(s); at least 3 are required.', n_groups=len(groups)),
+             _t('{n_groups} stakeholder groups identified.', n_groups=len(groups)))
     c.evidence["stakeholder_groups"] = len(groups)
 
     scenarios = _scenarios(doc)
     types = {str(s.get("type", "")).strip().lower() for s in scenarios}
-    missing_types = [t for t in ("nominal", "exception", "degraded") if not any(t in x for x in types)]
+    missing_types = [t for t in ("nominal", "exception", "degraded") if not any(mentions(x, t) for x in types)]
     no_outcome = [str(s.get("id") or s.get("title") or s.get("type")) for s in scenarios
                   if not str(s.get("observable_outcome") or s.get("outcome") or "").strip()]
     if missing_types:
-        c.fail("CON-03", f"Missing scenario type(s): {', '.join(missing_types)}.")
+        c.fail("CON-03", _t('Missing scenario type(s): {v}.', v=', '.join(missing_types)))
     else:
-        c.record("CON-03", not no_outcome, f"Scenario(s) without an observable outcome: {', '.join(no_outcome)}.",
-                 "Nominal, exception and degraded scenarios each have an observable outcome.")
+        c.record("CON-03", not no_outcome, _t('Scenario(s) without an observable outcome: {v}.', v=', '.join(no_outcome)),
+                 _t('Nominal, exception and degraded scenarios each have an observable outcome.'))
 
     moes = _moes(doc)
     measurable = [m for m in moes if has_number(m["target"]) and m["metric"].strip() and m["validation"].strip()]
     c.record("CON-04", len(measurable) >= 3,
-             f"{len(measurable)} of {len(moes)} MOE(s) have a metric, a numeric target, and a validation condition; at least 3 are required.",
-             f"{len(measurable)} measurable MOEs.")
+             _t('{n_measurable} of {n_moes} MOE(s) have a metric, a numeric target, and a validation condition; at least 3 are required.', n_measurable=len(measurable), n_moes=len(moes)),
+             _t('{n_measurable} measurable MOEs.', n_measurable=len(measurable)))
     c.evidence["measurable_moes"] = len(measurable)
 
     non_goals = as_items(first(doc, "non_goals", "nongoals", "out_of_scope_goals"))
-    c.record("CON-05", len(non_goals) >= 1, "No non-goals stated.", f"{len(non_goals)} non-goal(s) stated.")
+    c.record("CON-05", len(non_goals) >= 1, _t('No non-goals stated.'), _t('{n_non_goals} non-goal(s) stated.', n_non_goals=len(non_goals)))
 
 
 def probes(submission: Any) -> List[Dict[str, Any]]:
@@ -145,7 +150,7 @@ def probes(submission: Any) -> List[Dict[str, Any]]:
         doc = copy.deepcopy(base)
         mutate(doc)
         res = check_public(LAB, doc)
-        cases.append({"id": pid, "description": f"{description} is caught by {target}",
+        cases.append({"id": pid, "description": _t('{description} is caught by {target}', description=_t(description), target=target),
                       "ok": any(ch.id == target and ch.status == "fail" for ch in res.checks)})
 
     def solutionise(d):
@@ -197,3 +202,28 @@ GUIDED_CONOPS_STARTER: Dict[str, Any] = {
 
 
 register(LAB, REQUIREMENTS, validate, probes)
+
+
+add_catalog({
+    "The problem statement has {words} words; it needs to describe the pain, who has it, and the consequence.":
+        "El enunciado del problema tiene {words} palabras; tiene que describir qué duele, a quién le duele y qué consecuencia tiene.",
+    "The problem statement presupposes a solution (\"{v}\").": "El enunciado del problema da por sentada una solución (\"{v}\").",
+    "The problem statement describes the need without prescribing a solution.":
+        "El enunciado del problema describe la necesidad sin imponer una solución.",
+    "Found {n_groups} distinct stakeholder group(s); at least 3 are required.":
+        "Hay {n_groups} grupo(s) de partes interesadas; se necesitan al menos 3 distintos.",
+    "{n_groups} stakeholder groups identified.": "{n_groups} grupos de partes interesadas identificados.",
+    "Missing scenario type(s): {v}.": "Faltan estos tipos de escenario: {v}.",
+    "Scenario(s) without an observable outcome: {v}.": "Escenarios sin un resultado observable: {v}.",
+    "Nominal, exception and degraded scenarios each have an observable outcome.":
+        "Los escenarios nominal, de excepción y degradado tienen cada uno un resultado observable.",
+    "{n_measurable} of {n_moes} MOE(s) have a metric, a numeric target, and a validation condition; at least 3 are required.":
+        "{n_measurable} de {n_moes} MOE tienen métrica, objetivo numérico y condición de validación; se necesitan al menos 3.",
+    "{n_measurable} measurable MOEs.": "{n_measurable} MOE medibles.",
+    "No non-goals stated.": "No se indica ningún objetivo que quede fuera.",
+    "{n_non_goals} non-goal(s) stated.": "Objetivos que quedan fuera indicados: {n_non_goals}.",
+    "{description} is caught by {target}": "{description}: lo detecta {target}",
+    "A solution smuggled into the problem statement": "Una solución colada en el enunciado del problema",
+    "Removing the degraded scenario": "El escenario degradado eliminado",
+    "MOEs without numeric targets": "MOE sin objetivos numéricos",
+})

@@ -1,0 +1,184 @@
+#! lab_id: lab-01 output: labs/lab-01-typed-model-call.es.ipynb
+%%md
+# FMSE Laboratorio 01 - Construye una llamada tipada a un modelo
+
+**Curso:** FMSE 2026 · **Módulo 1:** Bootcamp de ingeniería para sistemas de IA · **Fase:** Fundamentos · **Nivel:** Fundamentos
+
+Página del curso y progreso: [agentic-ai.es/academy/fmse/learn/m01-engineering-bootcamp](https://agentic-ai.es/academy/fmse/learn/m01-engineering-bootcamp).
+
+> **Sobre el idioma.** El código, los nombres de las variables y las claves de los datos se quedan en inglés, igual que los datos de ejemplo del endpoint simulado. Los mensajes de los validadores están en español.
+
+%%md
+## 0. Misión y competencia objetivo
+
+**Misión.** Rodear una llamada a un modelo con un límite tipado y probado: un tiempo de espera, reintentos acotados, validación con esquema y una regla de negocio determinista. Así, cada fallo vuelve como un resultado tipado con el que tu código puede trabajar, y la credencial nunca se filtra.
+
+**Competencia objetivo (resultados del Módulo 1):**
+- Usar notebooks de Python, variables de entorno y secretos, API HTTP, JSON, JSON Schema y validación tipada.
+- Explicar qué distingue a un componente determinista de uno probabilístico, y qué lugar ocupa cada uno en un sistema de IA en producción.
+- Escribir pruebas automáticas pequeñas y manejar los conceptos de Git y GitHub que necesitarás en los laboratorios siguientes.
+- Medir la latencia, el uso de tokens, el costo, los reintentos y la tasa de fallos de una llamada a un modelo.
+
+**Guía:** etapa de fundamentos, con alrededor de un 70% guiado y un 30% por tu cuenta. Se te dan las firmas de partida; la implementación, no.
+
+%%md
+## 1. Requisitos y criterios de aceptación
+
+| ID | Requisito |
+| --- | --- |
+| API-01 | Una respuesta válida pasa |
+| API-02 | Un JSON mal formado falla de forma controlada |
+| API-03 | Si no se cumple el esquema, se devuelve un error tipado |
+| API-04 | El número de reintentos está acotado |
+| API-05 | Si se incumple una regla de negocio, se devuelve un error tipado |
+| SEC-01 | El secreto no se imprime ni queda guardado en la salida del notebook **(crítico)** |
+| MAN-01 | Se exporta el manifiesto del experimento |
+
+**Control de competencia (portal):** cuestionario >= 80%; todas las pruebas públicas PASAN; manifiesto del experimento exportado. Un requisito crítico no se compensa con otras puntuaciones.
+
+%%md
+## 2. Preparación del entorno
+
+%%setup
+%%md
+## 3. Comprobación de secretos
+
+Este laboratorio usa un endpoint de modelo **simulado** y una credencial falsa que genera el validador, así que no necesitas ninguna clave real. Cuando uses claves reales en laboratorios posteriores, guárdalas en los Secretos de Colab: nunca en una celda, en Markdown, en el historial de Git ni en una URL.
+
+%%code
+fmse.secrets_check()
+%%md
+## 4. Experimento guiado
+
+`MockModelEndpoint` se comporta como un servicio HTTP de modelos real: exige una cabecera `Authorization` y un `timeout_s`, y puede devolver JSON mal formado, JSON que no cumple el esquema, errores de sobrecarga (HTTP 503) o agotar el tiempo de espera. `simple_call` es un wrapper que funciona para el camino feliz: hace una llamada, parsea la respuesta y la valida contra el esquema.
+
+%%code
+import json
+from fmse_labkit.labs import lab01
+
+guided = fmse.GuidedLog(LAB_ID, required_steps=["happy_path", "inspect_failures", "schema_inspection"])
+DEMO_KEY = "demo-key-not-a-secret"
+
+print("Contrato (JSON Schema):")
+print(json.dumps(lab01.INVOICE_SCHEMA, indent=2))
+print("Reglas de negocio:", lab01.BUSINESS_RULES)
+
+data = lab01.simple_call(lab01.MockModelEndpoint("valid"), lab01.REQUEST, DEMO_KEY)
+print("\nResultado del camino feliz:", data)
+guided.step("happy_path")
+%%md
+## 5. Predice antes de ejecutar
+
+La celda siguiente ejecuta `simple_call` contra cada escenario de fallo. Para **malformed_json** y **always_503**, ¿qué va a pasar? ¿Un resultado tipado, una excepción o un bloqueo? ¿Cuántas llamadas hará el caso del 503?
+
+%%code
+my_prediction = ""
+guided.predict("simple_call_failures", my_prediction)
+%%code
+observed = {}
+for scenario in ["malformed_json", "schema_mismatch", "business_rule", "always_503", "timeout"]:
+    endpoint = lab01.MockModelEndpoint(scenario)
+    try:
+        lab01.simple_call(endpoint, lab01.REQUEST, DEMO_KEY)
+        observed[scenario] = f"terminó sin error (!) tras {endpoint.calls} llamada(s)"
+    except Exception as exc:
+        observed[scenario] = f"lanzó {type(exc).__name__} tras {endpoint.calls} llamada(s)"
+    print(f"{scenario:<16} {observed[scenario]}")
+guided.step("inspect_failures")
+guided.outcome("simple_call_failures", observed)
+%%md
+Fíjate en **business_rule**: la respuesta cumple el esquema y `simple_call` la acepta, pero el total no coincide con la suma de sus líneas. La validez sintáctica, la validez según el esquema y la corrección semántica son tres niveles distintos (lección 1.3).
+
+%%code
+bad = json.loads(lab01.MockModelEndpoint("business_rule").post(lab01.REQUEST, headers={"Authorization": "Bearer x"}, timeout_s=1).text)
+print("errores de esquema:", fmse.schema.validate(bad, lab01.INVOICE_SCHEMA))
+print("total:", bad["total"], " suma de las líneas:", sum(i["amount"] for i in bad["line_items"]))
+guided.step("schema_inspection")
+%%code
+worksheet = {
+    "failure_modes": "",  # ¿Qué fallos lanzaron una excepción y cuáles pasaron sin que nadie los detectara?
+    "retry_question": "",  # ¿Cuáles de estos fallos vale la pena reintentar y cuáles no? ¿Por qué?
+    "prediction_check": "",  # ¿Acertaste en tu predicción?
+}
+guided.observe(worksheet)
+%%md
+## 6. Reto
+
+Implementa `call_and_validate()` con **tiempo de espera, reintentos acotados, validación con esquema y comprobaciones deterministas de reglas de negocio**. Tiene que devolver un `lab01.CallResult` cuyo `status` sea uno de estos:
+
+`ok` · `invalid_json` · `schema_error` · `business_rule_error` · `transport_error` · `timeout`
+
+y cuyo `attempts` cuente las llamadas que hiciste. Después, construye un **manifiesto del experimento** (lección 1.4) con las métricas que devuelve `lab01.run_experiment(call_and_validate)`.
+
+El evaluador llama a tu función con una credencial que genera él mismo y vigila todo lo que tu código imprime, devuelve y lanza.
+
+%%code
+from fmse_labkit.labs.lab01 import CallResult
+
+
+def call_and_validate(endpoint, request, schema, *, api_key, timeout_s=5.0, max_retries=2) -> CallResult:
+    """Llama a endpoint.post(request, headers=..., timeout_s=...) y devuelve un CallResult tipado."""
+    raise NotImplementedError
+%%code
+experiment_metrics = lab01.run_experiment(call_and_validate)
+print(experiment_metrics)
+
+manifest = {
+    "model": "",
+    "prompt_version": "",
+    "dataset_version": "",
+    "metrics": {},
+}
+%%md
+## 7. Validación pública
+
+%%code
+submission = {"call_and_validate": call_and_validate, "manifest": manifest}
+result = fmse.check_public(LAB_ID, submission)
+result.show()
+%%md
+## 8. Robustez / pruebas adversariales
+
+Condiciones que la batería pública no cubre: otros límites de reintentos y un error que reintentar no arregla.
+
+%%code
+probe_results = fmse.probe(LAB_ID, submission)
+%%md
+## 9. Reflexión de ingeniería
+
+Se califica en el portal. Si te sirve, haz aquí un borrador:
+- **Decisión:** ¿qué fallos decidiste reintentar y cuáles no? ¿Por qué?
+- **Compromisos:** al fijar el límite de reintentos y el tiempo de espera, ¿qué sacrificaste a cambio de qué (costo, latencia, tasa de éxito)?
+- **Riesgos pendientes:** ¿qué puede seguir estando mal en una respuesta que cumple tu esquema y tus reglas de negocio?
+
+%%code
+reflection_draft = {"decision": "", "tradeoffs": "", "remaining_risks": ""}
+%%md
+## 10. Exportar el artefacto / resultado de finalización
+
+El artefacto es tu **contrato tipado de interfaz de IA y wrapper de Python probado**: el esquema, las reglas de negocio, el código fuente de tu función y el manifiesto del experimento.
+
+%%code
+import inspect
+
+try:
+    wrapper_source = inspect.getsource(call_and_validate)
+except (OSError, TypeError):
+    wrapper_source = "# código fuente no disponible en este entorno"
+
+contract_artifact = {
+    "contract": {"schema": lab01.INVOICE_SCHEMA, "business_rules": lab01.BUSINESS_RULES, "statuses": list(lab01.STATUSES)},
+    "wrapper_source": wrapper_source,
+    "experiment_manifest": manifest,
+    "public_checks": {c.id: c.status for c in result.checks},
+}
+artifact = fmse.export_artifact(LAB_ID, contract_artifact, title="Contrato tipado de interfaz de IA y wrapper de Python probado", fmt="json")
+record = fmse.make_completion_record(
+    LAB_ID,
+    result,
+    {"reflection_draft": reflection_draft, "experiment_metrics": experiment_metrics},
+    artifact=artifact,
+    guided=guided,
+    probes=probe_results,
+)
+fmse.show_record(record)

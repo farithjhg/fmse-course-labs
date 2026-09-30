@@ -64,9 +64,9 @@ from fmse_labkit.labs import lab00
 guided = fmse.GuidedLog(LAB_ID, required_steps=["run_weak_brief", "run_strong_brief", "compare_outputs"])
 model = fmse.model.get_model(lab00.simulated_brief_response)
 
-print("REQUEST:", lab00.MANAGEMENT_REQUEST, "\n")
-print("WEAK BRIEF:\n", lab00.WEAK_BRIEF, "\n")
-print("STRONG BRIEF:\n", lab00.STRONG_BRIEF)
+print("REQUEST:", lab00.request(), "\n")
+print("WEAK BRIEF:\n", lab00.weak_brief(), "\n")
+print("STRONG BRIEF:\n", lab00.strong_brief())
 %%md
 ## 5. Predict before you run
 
@@ -79,9 +79,9 @@ Acceptance checklist: *every figure cites a source · states uncertainty · foll
 my_prediction = ""
 guided.predict("weak_vs_strong", my_prediction)
 %%code
-weak = model.complete(lab00.WEAK_BRIEF)
+weak = model.complete(lab00.weak_brief())
 guided.step("run_weak_brief")
-strong = model.complete(lab00.STRONG_BRIEF)
+strong = model.complete(lab00.strong_brief())
 guided.step("run_strong_brief")
 
 for label, response in (("WEAK", weak), ("STRONG", strong)):
@@ -113,7 +113,7 @@ guided.observe(worksheet)
 No prompt template is supplied — and copying the strong brief from section 4 will not help you: it was written for a different decision. Write the brief in **Markdown** (one `##` heading per section) or **YAML** (one key per section).
 
 %%code
-print(lab00.MANAGEMENT_REQUEST)
+print(lab00.request())
 %%code
 my_brief = """
 """

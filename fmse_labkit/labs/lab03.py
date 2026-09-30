@@ -21,7 +21,8 @@ import re
 from typing import Any, Dict, List
 
 from ..core import Checker, check_public, register
-from ..textutil import parse_document
+from ..i18n import add_catalog, t as _t
+from ..textutil import canonical, fold, has_shall, mentions, parse_document
 
 LAB = "lab-03"
 REQUIRED_CATEGORIES = ("functional", "performance", "interface", "security", "cost", "operational")
@@ -108,21 +109,21 @@ def validate(submission: Any, c: Checker) -> None:
         rid = str(r.get("id") or "?")
         stmt = str(r.get("statement") or "")
         method = str(r.get("verification_method") or r.get("verification") or "").lower()
-        if not r.get("id") or "shall" not in stmt.lower() or not str(r.get("rationale") or "").strip() or not any(m in method for m in VERIFICATION_METHODS):
+        if not r.get("id") or not has_shall(stmt) or not str(r.get("rationale") or "").strip() or not any(mentions(method, m) for m in VERIFICATION_METHODS):
             incomplete.append(rid)
     if not reqs:
-        c.fail("REQ-01", "No requirements found under 'requirements'.")
+        c.fail("REQ-01", _t("No requirements found under 'requirements'."))
     else:
-        c.record("REQ-01", not incomplete, f"Requirement(s) {', '.join(incomplete[:8])} lack a 'shall' statement, a rationale, or a verification method (test/analysis/inspection/demonstration).",
-                 f"All {len(reqs)} requirements are complete and verifiable.")
+        c.record("REQ-01", not incomplete, _t("Requirement(s) {v} lack a 'shall' statement, a rationale, or a verification method (test/analysis/inspection/demonstration).", v=', '.join(incomplete[:8])),
+                 _t('All {n_reqs} requirements are complete and verifiable.', n_reqs=len(reqs)))
 
     ids = [str(x.get("id")) for x in reqs + fmea if x.get("id")]
     dups = sorted({i for i in ids if ids.count(i) > 1})
-    c.record("REQ-02", bool(ids) and not dups, f"Duplicate id(s): {', '.join(dups)}." if dups else "No ids found.", "All ids are unique.")
+    c.record("REQ-02", bool(ids) and not dups, _t('Duplicate id(s): {v}.', v=', '.join(dups)) if dups else _t('No ids found.'), _t('All ids are unique.'))
 
-    cats = {str(r.get("category") or "").strip().lower() for r in reqs}
+    cats = {canonical(r.get("category")) for r in reqs}
     missing = [k for k in REQUIRED_CATEGORIES if k not in cats]
-    c.record("REQ-03", not missing, f"No requirement in categor{'y' if len(missing) == 1 else 'ies'}: {', '.join(missing)}.", "Every required category is covered.")
+    c.record("REQ-03", not missing, (_t('No requirement in category: {v}.', v=missing[0]) if len(missing) == 1 else _t('No requirement in categories: {v}.', v=', '.join(missing))), _t('Every required category is covered.'))
 
     wrong = []
     for f in fmea:
@@ -134,9 +135,9 @@ def validate(submission: Any, c: Checker) -> None:
         if None in (s, o, d) or rpn != s * o * d:
             wrong.append(str(f.get("id") or "?"))
     if not fmea:
-        c.fail("REQ-04", "No AI-FMEA rows found under 'fmea'.")
+        c.fail("REQ-04", _t("No AI-FMEA rows found under 'fmea'."))
     else:
-        c.record("REQ-04", not wrong, f"RPN is missing or wrong (or a score is outside 1-10) for: {', '.join(wrong[:8])}.", "RPN arithmetic is correct on every row.")
+        c.record("REQ-04", not wrong, _t('RPN is missing or wrong (or a score is outside 1-10) for: {v}.', v=', '.join(wrong[:8])), _t('RPN arithmetic is correct on every row.'))
 
     req_ids = {str(r.get("id")) for r in reqs if r.get("id")}
     uncovered = []
@@ -149,22 +150,25 @@ def validate(submission: Any, c: Checker) -> None:
                 uncovered.append(str(f.get("id") or "?"))
     high = sum(1 for f in fmea if (_int(f.get("severity")) or 0) >= HIGH_SEVERITY)
     c.record("REQ-05", bool(fmea) and not uncovered,
-             f"High-severity failure(s) without a mitigation or without a verification link to an existing requirement: {', '.join(uncovered[:8])}." if fmea else "No failure modes to check.",
-             f"All {high} high-severity failures have mitigations linked to verifying requirements.")
+             _t('High-severity failure(s) without a mitigation or without a verification link to an existing requirement: {v}.', v=', '.join(uncovered[:8])) if fmea else _t('No failure modes to check.'),
+             _t('All {high} high-severity failures have mitigations linked to verifying requirements.', high=high))
 
-    text = " ".join(str(f.get("failure_mode", "")) + " " + str(f.get("cause", "")) for f in fmea).lower()
-    has_injection = bool(re.search(r"(indirect|document|invoice|embedded).{0,40}injection|injection.{0,40}(document|invoice|indirect)", text))
-    has_agency = bool(re.search(r"excessive agency|over-?privileg|unauthori[sz]ed (payment|action|write)|autonomous (payment|action)", text))
+    text = " ".join(str(f.get("failure_mode", "")) + " " + str(f.get("cause", "")) for f in fmea)
+    text = fold(text)
+    has_injection = bool(re.search(r"(indirect|document|invoice|embedded).{0,40}injection|injection.{0,40}(document|invoice|indirect)"
+                                  r"|(indirect|document|factura|incrustad).{0,40}inyeccion|inyeccion.{0,40}(document|factura|indirect)", text))
+    has_agency = bool(re.search(r"excessive agency|over-?privileg|unauthori[sz]ed (payment|action|write)|autonomous (payment|action)"
+                               r"|agencia excesiva|privilegios? excesiv|(pago|accion|escritura)s? no autorizad|(pago|accion)(es|s)? autonom", text))
     problems = []
     if len(reqs) < 12:
-        problems.append(f"{len(reqs)} requirements (need 12+)")
+        problems.append(_t('{n_reqs} requirements (need 12+)', n_reqs=len(reqs)))
     if len(fmea) < 10:
-        problems.append(f"{len(fmea)} failure modes (need 10+)")
+        problems.append(_t('{n_fmea} failure modes (need 10+)', n_fmea=len(fmea)))
     if not has_injection:
-        problems.append("no indirect prompt injection failure mode")
+        problems.append(_t('no indirect prompt injection failure mode'))
     if not has_agency:
-        problems.append("no excessive agency failure mode")
-    c.record("REQ-06", not problems, "Coverage gaps: " + "; ".join(problems) + ".", f"{len(reqs)} requirements and {len(fmea)} failure modes, including injection and agency.")
+        problems.append(_t('no excessive agency failure mode'))
+    c.record("REQ-06", not problems, _t('Coverage gaps: ') + "; ".join(problems) + ".", _t('{n_reqs} requirements and {n_fmea} failure modes, including injection and agency.', n_reqs=len(reqs), n_fmea=len(fmea)))
     c.evidence.update({"requirements": len(reqs), "failure_modes": len(fmea), "high_severity": high})
 
 
@@ -192,7 +196,7 @@ def probes(submission: Any) -> List[Dict[str, Any]]:
         except Exception:  # noqa: BLE001
             return
         res = check_public(LAB, doc)
-        out.append({"id": pid, "description": f"{description} is caught by {target}", "ok": any(ch.id == target and ch.status == "fail" for ch in res.checks)})
+        out.append({"id": pid, "description": _t('{description} is caught by {target}', description=_t(description), target=target), "ok": any(ch.id == target and ch.status == "fail" for ch in res.checks)})
 
     def dup(d):
         rs = d["requirements"]
@@ -216,3 +220,37 @@ def probes(submission: Any) -> List[Dict[str, Any]]:
 
 
 register(LAB, REQUIREMENTS, validate, probes)
+
+
+add_catalog({
+    "No requirements found under 'requirements'.": "No se encontraron requisitos bajo 'requirements'.",
+    "Requirement(s) {v} lack a 'shall' statement, a rationale, or a verification method (test/analysis/inspection/demonstration).":
+        "A los requisitos {v} les falta la frase con 'deberá', la justificación o el método de verificación (prueba/análisis/inspección/demostración).",
+    "All {n_reqs} requirements are complete and verifiable.": "Los {n_reqs} requisitos están completos y se pueden verificar.",
+    "Duplicate id(s): {v}.": "IDs duplicados: {v}.",
+    "No ids found.": "No se encontró ningún ID.",
+    "All ids are unique.": "Todos los IDs son únicos.",
+    "No requirement in category: {v}.": "No hay ningún requisito de la categoría: {v}.",
+    "No requirement in categories: {v}.": "No hay ningún requisito de las categorías: {v}.",
+    "Every required category is covered.": "Todas las categorías obligatorias están cubiertas.",
+    "No AI-FMEA rows found under 'fmea'.": "No se encontraron filas de AI-FMEA bajo 'fmea'.",
+    "RPN is missing or wrong (or a score is outside 1-10) for: {v}.":
+        "El RPN falta o es incorrecto (o alguna puntuación está fuera de 1-10) en: {v}.",
+    "RPN arithmetic is correct on every row.": "La aritmética del RPN es correcta en todas las filas.",
+    "High-severity failure(s) without a mitigation or without a verification link to an existing requirement: {v}.":
+        "Fallos de gravedad alta sin mitigación o sin un enlace de verificación a un requisito existente: {v}.",
+    "No failure modes to check.": "No hay modos de fallo que comprobar.",
+    "All {high} high-severity failures have mitigations linked to verifying requirements.":
+        "Los {high} fallos de gravedad alta tienen mitigaciones enlazadas a requisitos que las verifican.",
+    "{n_reqs} requirements (need 12+)": "{n_reqs} requisitos (se necesitan 12 o más)",
+    "{n_fmea} failure modes (need 10+)": "{n_fmea} modos de fallo (se necesitan 10 o más)",
+    "no indirect prompt injection failure mode": "no hay ningún modo de fallo de inyección indirecta de prompts",
+    "no excessive agency failure mode": "no hay ningún modo de fallo de agencia excesiva",
+    "Coverage gaps: ": "Brechas de cobertura: ",
+    "{n_reqs} requirements and {n_fmea} failure modes, including injection and agency.":
+        "{n_reqs} requisitos y {n_fmea} modos de fallo, incluidas la inyección y la agencia excesiva.",
+    "{description} is caught by {target}": "{description}: lo detecta {target}",
+    "A duplicated requirement id": "Un ID de requisito duplicado",
+    "An off-by-one RPN": "Un RPN con un error de una unidad",
+    "A high-severity failure with its mitigations removed": "Un fallo de gravedad alta al que se le quitaron las mitigaciones",
+})

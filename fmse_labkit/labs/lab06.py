@@ -19,6 +19,7 @@ import re
 from typing import Any, Dict, List
 
 from ..core import Checker, check_public, register
+from ..i18n import add_catalog, t as _t
 
 LAB = "lab-06"
 
@@ -89,13 +90,13 @@ def validate(submission: Any, c: Checker) -> None:
     good = [a for a in alts if a.get("id") and a.get("pattern") in PATTERNS and len(str(a.get("description", "")).split()) >= 8]
     patterns = {a["pattern"] for a in good}
     c.record("ARC-01", len(good) >= 3 and len(patterns) >= 3,
-             f"{len(good)} well-described alternative(s) using {len(patterns)} distinct pattern(s); need 3 of each (patterns: {', '.join(PATTERNS)}).",
-             f"{len(good)} alternatives across {len(patterns)} patterns.")
+             _t('{n_good} well-described alternative(s) using {n_patterns} distinct pattern(s); need 3 of each (patterns: {v}).', n_good=len(good), n_patterns=len(patterns), v=', '.join(PATTERNS)),
+             _t('{n_good} alternatives across {n_patterns} patterns.', n_good=len(good), n_patterns=len(patterns)))
 
     crits = [x for x in (submission.get("criteria") or []) if isinstance(x, dict)]
     untraced = [str(x.get("id", "?")) for x in crits if not x.get("requirements") or any(r not in SCENARIO["requirements"] for r in x.get("requirements", []))]
-    c.record("ARC-02", bool(crits) and not untraced, f"Criteria without valid requirement links: {', '.join(untraced) or 'no criteria'} (use ids from SCENARIO['requirements']).",
-             "Every criterion traces to scenario requirements.")
+    c.record("ARC-02", bool(crits) and not untraced, _t("Criteria without valid requirement links: {v} (use ids from SCENARIO['requirements']).", v=', '.join(untraced) or 'no criteria'),
+             _t('Every criterion traces to scenario requirements.'))
 
     try:
         weights = [float(x["weight"]) for x in crits]
@@ -103,8 +104,8 @@ def validate(submission: Any, c: Checker) -> None:
         weights = []
     total = sum(weights)
     c.record("ARC-03", bool(weights) and all(w > 0 for w in weights) and abs(total - 1) < 1e-6,
-             f"Weights sum to {total:.4f}" + (" and include non-positive values" if any(w <= 0 for w in weights) else "") + "; they must be positive and sum to 1.",
-             "Weights are positive and sum to 1.")
+             _t('Weights sum to {total:.4f}', total=total) + (_t(' and include non-positive values') if any(w <= 0 for w in weights) else "") + _t('; they must be positive and sum to 1.'),
+             _t('Weights are positive and sum to 1.'))
 
     scores = submission.get("scores") or {}
     sens = [s for s in (submission.get("sensitivity") or []) if isinstance(s, dict)]
@@ -115,22 +116,22 @@ def validate(submission: Any, c: Checker) -> None:
             for delta in (0.2, -0.2):
                 row = next((s for s in sens if s.get("criterion") == cid and abs(float(s.get("delta", 0)) - delta) < 1e-9), None)
                 if row is None:
-                    problems.append(f"missing {cid} {delta:+.0%}")
+                    problems.append(_t('missing {cid} {delta:+.0%}', cid=cid, delta=delta))
                     continue
                 expected = winner(scores, perturb(crits, cid, delta))
                 if row.get("winner") != expected:
-                    problems.append(f"{cid} {delta:+.0%} reports {row.get('winner')!r}")
+                    problems.append(_t('{cid} {delta:+.0%} reports {v}', cid=cid, delta=delta, v=repr(row.get('winner'))))
     else:
-        problems.append("no scored criteria to perturb")
-    c.record("ARC-04", not problems, "Sensitivity analysis incomplete or not reproducible: " + "; ".join(problems[:4]) + ".", "Top-2 weights perturbed +/-20%; winners reproduce.")
+        problems.append(_t('no scored criteria to perturb'))
+    c.record("ARC-04", not problems, _t('Sensitivity analysis incomplete or not reproducible: ') + "; ".join(problems[:4]) + ".", _t('Top-2 weights perturbed +/-20%; winners reproduce.'))
 
     decision = submission.get("decision") or {}
-    triggers = [t for t in (decision.get("revisit_triggers") or []) if isinstance(t, str) and re.search(r"\d|>|<|exceed|drops? below|above", t)]
+    triggers = [t for t in (decision.get("revisit_triggers") or []) if isinstance(t, str) and re.search(r"\d|>|<|exceed|drops? below|above|supera|por debajo|por encima", t)]
     missing = [k for k in ("selected", "context", "rationale", "consequences") if not decision.get(k)]
     if decision.get("selected") not in {a.get("id") for a in alts}:
         missing.append("selected must be one of your alternative ids")
-    c.record("ARC-05", not missing and bool(triggers), f"ADR incomplete: {', '.join(missing) or 'no measurable revisit trigger'}.",
-             f"Decision recorded with {len(triggers)} measurable revisit trigger(s).")
+    c.record("ARC-05", not missing and bool(triggers), _t('ADR incomplete: {v}.', v=', '.join(missing) or 'no measurable revisit trigger'),
+             _t('Decision recorded with {n_triggers} measurable revisit trigger(s).', n_triggers=len(triggers)))
     if weights and scores:
         c.evidence["baseline_winner"] = winner(scores, crits)
 
@@ -147,7 +148,7 @@ def probes(submission: Any) -> List[Dict[str, Any]]:
         except Exception:  # noqa: BLE001
             return
         res = check_public(LAB, s)
-        out.append({"id": pid, "description": f"{description} is caught by {target}", "ok": any(ch.id == target and ch.status == "fail" for ch in res.checks)})
+        out.append({"id": pid, "description": _t('{description} is caught by {target}', description=_t(description), target=target), "ok": any(ch.id == target and ch.status == "fail" for ch in res.checks)})
 
     run("P1", "Weights that sum to 1.1", "ARC-03", lambda s: s["criteria"][0].__setitem__("weight", float(s["criteria"][0]["weight"]) + 0.1))
     run("P2", "A sensitivity row with a guessed winner", "ARC-04", lambda s: s["sensitivity"][0].__setitem__("winner", "not-a-real-alternative"))
@@ -156,3 +157,28 @@ def probes(submission: Any) -> List[Dict[str, Any]]:
 
 
 register(LAB, REQUIREMENTS, validate, probes)
+
+
+add_catalog({
+    "{n_good} well-described alternative(s) using {n_patterns} distinct pattern(s); need 3 of each (patterns: {v}).":
+        "{n_good} alternativa(s) bien descrita(s) con {n_patterns} patrón(es) distinto(s); se necesitan 3 de cada (patrones: {v}).",
+    "{n_good} alternatives across {n_patterns} patterns.": "{n_good} alternativas que cubren {n_patterns} patrones.",
+    "Criteria without valid requirement links: {v} (use ids from SCENARIO['requirements']).":
+        "Criterios sin enlaces válidos a requisitos: {v} (usa IDs de SCENARIO['requirements']).",
+    "Every criterion traces to scenario requirements.": "Cada criterio es trazable a requisitos del escenario.",
+    "Weights are positive and sum to 1.": "Los pesos son positivos y suman 1.",
+    "Top-2 weights perturbed +/-20%; winners reproduce.": "Los 2 pesos principales se perturbaron un +/-20%; los ganadores se reproducen.",
+    "ADR incomplete: {v}.": "ADR incompleto: {v}.",
+    "Decision recorded with {n_triggers} measurable revisit trigger(s).": "Decisión registrada con {n_triggers} disparador(es) de revisión medible(s).",
+    "; they must be positive and sum to 1.": "; deben ser positivos y sumar 1.",
+    "no scored criteria to perturb": "no hay criterios puntuados que perturbar",
+    "Weights sum to {total:.4f}": "Los pesos suman {total:.4f}",
+    "Sensitivity analysis incomplete or not reproducible: ": "Análisis de sensibilidad incompleto o no reproducible: ",
+    "{description} is caught by {target}": "{description}: lo detecta {target}",
+    " and include non-positive values": " e incluyen valores no positivos",
+    "missing {cid} {delta:+.0%}": "falta {cid} {delta:+.0%}",
+    "{cid} {delta:+.0%} reports {v}": "{cid} {delta:+.0%} indica {v}",
+    "Weights that sum to 1.1": "Pesos que suman 1,1",
+    "A sensitivity row with a guessed winner": "Una fila de sensibilidad con un ganador inventado",
+    "An ADR without revisit triggers": "Un ADR sin disparadores de revisión",
+})

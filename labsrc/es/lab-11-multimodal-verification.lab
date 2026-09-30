@@ -1,0 +1,139 @@
+#! lab_id: lab-11 output: labs/lab-11-multimodal-verification.es.ipynb
+%%md
+# FMSE Laboratorio 11 - Verificación multimodal de documentos
+
+**Curso:** FMSE 2026 · **Módulo 11:** Sistemas multimodales, de uso de la computadora y de acción · **Fase:** Construir · **Nivel:** Sénior
+
+Este notebook es el entorno del laboratorio. La página del curso, tu progreso y tu Cuaderno de Ingeniería están en
+[agentic-ai.es/academy/fmse/learn/m11-multimodal-action](https://agentic-ai.es/academy/fmse/learn/m11-multimodal-action).
+Avanza de arriba abajo: cada sección tiene un propósito.
+
+> **Sobre el idioma.** Las explicaciones y los mensajes de los validadores están en español. El código, las claves de los datos y las páginas de la tienda simulada se quedan en inglés: tu plan tiene que buscar las etiquetas en inglés, como "Add to cart".
+%%md
+## 0. Misión y competencia objetivo
+
+**Misión.** Diseñar un plan seguro de uso del navegador o de la computadora para un flujo de compras e implementarlo como una simulación con puntos de control de aprobación.
+
+**Laboratorio guiado.** Combinas la comprensión de imágenes y documentos con comprobaciones numéricas deterministas.
+
+**Competencia objetivo (resultados del Módulo 11):**
+- Diseñar entradas multimodales que dejen explícita su procedencia y cada paso de transformación.
+- Usar OCR y análisis de documentos solo donde hagan falta, y validar la estructura extraída.
+- Diseñar acciones en la computadora o el navegador con permisos acotados, puntos de control y una forma de recuperarse.
+- Evaluar la percepción y la acción por separado.
+
+**Guía:** alrededor de un 25% guiado y un 75% por tu cuenta. Es un **reto de ingeniería**: la parte guiada te da un camino de referencia que funciona; el reto, no.
+%%md
+## 1. Requisitos y criterios de aceptación
+
+Los validadores públicos comprueban estos requisitos. Te dicen qué requisito falló y por qué, nunca la implementación que se esperaba.
+
+| ID | Requisito |
+| --- | --- |
+| ACT-01 | Se registra la procedencia de la evidencia |
+| ACT-02 | Hay una lista de acciones permitidas |
+| ACT-03 | Las acciones de alto impacto requieren aprobación **(crítico)** |
+| ACT-04 | Se verifica el resultado después de cada acción |
+| ACT-05 | El presupuesto de fallos y reintentos está acotado |
+| ACT-06 | La simulación supera el escenario normal y el de maquetación cambiada |
+
+**Control de competencia (portal):** la simulación supera el escenario normal y el de maquetación cambiada. También hacen falta el cuestionario (>= 80%), el laboratorio guiado, el artefacto y tu reflexión. Un requisito crítico no se compensa con otras puntuaciones.
+%%md
+## 2. Preparación del entorno
+%%setup
+%%md
+## 3. Comprobación de secretos
+
+Este laboratorio funciona por completo sin conexión: no necesita ninguna clave de proveedor. Las claves que uses en otros laboratorios van en los Secretos de Colab y nunca se imprimen.
+%%code
+fmse.secrets_check()
+%%md
+## 4. Experimento guiado
+
+Una factura escaneada sintética, entregada como bloques de maquetación de OCR con sus cajas delimitadoras (bounding boxes). La percepción lee la tabla; el código comprueba la aritmética. La factura de ejemplo está en inglés.
+%%code
+from fmse_labkit.labs import lab11
+
+guided = fmse.GuidedLog(LAB_ID, required_steps=["table_extracted", "totals_verified"])
+rows = lab11.extract_table(lab11.SCANNED_INVOICE)
+for r in rows:
+    print(r["item"], r["qty"], r["unit"], r["amount"], "<- caja", r["provenance"]["bbox"])
+guided.step("table_extracted")
+%%md
+## 5. Predice antes de ejecutar
+
+¿Cuadran las líneas de la factura con el total impreso? Predícelo antes de calcularlo. Escribe tu predicción y después ejecuta el experimento.
+%%code
+# Sustituye la cadena vacía por tu predicción y ejecuta esta celda.
+my_prediction = ""
+guided.predict("prediction", my_prediction)
+%%code
+computed = round(sum(r["amount"] for r in rows), 2)
+printed = lab11.printed_total(lab11.SCANNED_INVOICE)
+row_errors = [r["item"] for r in rows if round(r["qty"] * r["unit"], 2) != r["amount"]]
+print("calculado:", computed, "impreso:", printed, "filas con error:", row_errors)
+guided.step("totals_verified")
+guided.outcome("prediction", "ver la salida de arriba")
+%%md
+**Hoja de trabajo.** Escribe al menos una frase completa por campo: estas observaciones forman parte de la evidencia de tu laboratorio guiado.
+%%code
+worksheet = {
+    "numeric_check": "",  # ¿Qué encontró la comprobación aritmética y qué habría pasado sin ella?
+    "provenance_note": "",  # ¿De qué te sirve saber en qué caja de la página estaba cada dato?
+    "prediction_check": "",  # ¿Acertaste en tu predicción? ¿Qué se te escapó?
+}
+guided.observe(worksheet)
+%%md
+## 6. Reto
+
+**Plan seguro de navegador para compras.** Diseña un plan seguro de uso del navegador o de la computadora para un flujo de compras e impleméntalo como una simulación con puntos de control de aprobación.
+
+Restricciones:
+- Solo el servidor de compras está en la lista de permitidos.
+- Los reintentos por elemento están acotados (<= 3).
+%%code
+plan = {"allowlist": [], "actions": [], "high_impact": [], "max_retries": 0}
+
+
+def run_procurement(browser, sku, quantity, approver, plan):
+    """Maneja browser (goto/find/fill/click/screenshot/page) para hacer un pedido de `quantity` unidades de `sku`.
+    Devuelve {"status": "ordered"|"aborted"|"failed", "verified": bool, "evidence": [{"step", "url", "screenshot_sha256"}]}."""
+    raise NotImplementedError
+%%md
+## 7. Validación pública
+
+Ejecuta los validadores públicos. Los comentarios nombran el requisito y el motivo; las pistas son conceptuales. Revisa y vuelve a ejecutar tantas veces como necesites.
+%%code
+submission = {"plan": plan, "run_procurement": run_procurement}
+result = fmse.check_public(LAB_ID, submission)
+result.show()
+%%md
+## 8. Robustez / pruebas adversariales
+
+Condiciones adversariales adicionales, fuera de la batería que se califica. No cambian tu puntuación: te enseñan dónde es frágil tu solución.
+%%code
+probe_results = fmse.probe(LAB_ID, submission)
+%%md
+## 9. Reflexión de ingeniería
+
+La reflexión que se califica se escribe en el portal y se guarda con tu artefacto. Si te sirve, haz aquí un borrador:
+- **Decisión:** ¿qué acciones clasificaste como de alto impacto y cómo verifica tu ejecutor su resultado?
+- **Compromisos:** ¿qué cuesta, o qué riesgo supone, localizar los elementos por su etiqueta en lugar de por sus ids?
+- **Riesgos pendientes:** ¿qué cambio en la página seguiría rompiendo tu plan y cómo te darías cuenta?
+%%code
+reflection_draft = {"decision": "", "tradeoffs": "", "remaining_risks": ""}
+%%md
+## 10. Exportar el artefacto / resultado de finalización
+
+Exporta el artefacto **Diseño de seguridad multimodal y de acciones** e imprime un registro de finalización. Copia el registro y pégalo en la página del Módulo 11 en agentic-ai.es (**Importar el resultado del laboratorio**). El registro es un documento del flujo de aprendizaje, no un certificado firmado.
+%%code
+artifact = fmse.export_artifact(LAB_ID, {"plan": plan, "scenario_outcomes": result.evidence.get("scenarios")}, title="Diseño de seguridad multimodal y de acciones", fmt="json")
+record = fmse.make_completion_record(
+    LAB_ID,
+    result,
+    {"reflection_draft": reflection_draft, **{}},
+    artifact=artifact,
+    guided=guided,
+    probes=probe_results,
+)
+fmse.show_record(record)

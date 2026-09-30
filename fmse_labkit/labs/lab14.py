@@ -23,6 +23,7 @@ import hashlib
 from typing import Any, Dict, List, Optional
 
 from ..core import Checker, register
+from ..i18n import add_catalog, t as _t
 
 LAB = "lab-14"
 LABELS = ("billing", "technical", "account", "security_incident", "other")
@@ -133,25 +134,25 @@ def validate(submission: Any, c: Checker) -> None:
     known = (train | dev | test) <= all_ids
     covered = len(train | dev | test) >= 0.9 * len(all_ids)
     c.record("OPT-01", disjoint and known and covered and len(test) >= 15 and len(dev) >= 10 and len(train) >= 10,
-             f"Splits must be disjoint, use known ids, cover >= 90% of the data, with test >= 15 and dev/train >= 10 (got train {len(train)}, dev {len(dev)}, test {len(test)}{', overlapping' if not disjoint else ''}).",
-             f"train {len(train)} / dev {len(dev)} / test {len(test)}, disjoint.")
+             _t('Splits must be disjoint, use known ids, cover >= 90% of the data, with test >= 15 and dev/train >= 10 (got train {n_train}, dev {n_dev}, test {n_test}{v}).', n_train=len(train), n_dev=len(dev), n_test=len(test), v=_t(', overlapping') if not disjoint else ''),
+             _t('train {n_train} / dev {n_dev} / test {n_test}, disjoint.', n_train=len(train), n_dev=len(dev), n_test=len(test)))
 
     base = submission.get("baseline") or {}
     bprog = _program(base.get("program") or {})
     ok = bprog is not None and test and abs(float(base.get("test_score", -1)) - score(bprog, list(test))) < 1e-6
-    c.record("OPT-02", bool(ok), "Record the baseline program and the test score it actually achieves (recomputed value differs or is missing).", "Baseline recorded and reproducible.")
+    c.record("OPT-02", bool(ok), _t('Record the baseline program and the test score it actually achieves (recomputed value differs or is missing).'), _t('Baseline recorded and reproducible.'))
 
     log = [e for e in (submission.get("optimization_log") or []) if isinstance(e, dict)]
     complete = [e for e in log if _program(e.get("program") or {}) and e.get("split") in ("train", "dev", "test") and isinstance(e.get("score"), (int, float)) and isinstance(e.get("cost"), (int, float))]
-    c.record("OPT-03", len(complete) >= 5 and len(complete) == len(log), f"{len(complete)} of {len(log)} log entries are complete (program, split, score, cost); at least 5 trials are required.",
-             f"{len(log)} trials logged.")
+    c.record("OPT-03", len(complete) >= 5 and len(complete) == len(log), _t('{n_complete} of {n_log} log entries are complete (program, split, score, cost); at least 5 trials are required.', n_complete=len(complete), n_log=len(log)),
+             _t('{n_log} trials logged.', n_log=len(log)))
 
     sel = submission.get("selected") or {}
     sprog = _program(sel.get("program") or {})
     leaks = [e.get("trial", "?") for e in log if e.get("split") == "test" or set((e.get("program") or {}).get("demos") or []) - train]
     if sprog is None or set(sprog.demos) - train:
-        leaks.append("selected program uses non-train demos")
-    c.record("OPT-04", not leaks and sprog is not None, f"The test set (or non-train demos) was used during tuning: {', '.join(map(str, leaks[:5]))}.", "Only train/dev were used for tuning.")
+        leaks.append(_t('selected program uses non-train demos'))
+    c.record("OPT-04", not leaks and sprog is not None, _t('The test set (or non-train demos) was used during tuning: {v}.', v=', '.join(map(str, leaks[:5]))), _t('Only train/dev were used for tuning.'))
 
     pareto = [p for p in (submission.get("pareto") or []) if isinstance(p, dict) and _program(p.get("program") or {})]
     pts = [(_program(p["program"]), p) for p in pareto]
@@ -170,22 +171,22 @@ def validate(submission: Any, c: Checker) -> None:
         (measured[j][0] >= measured[sel_idx][0] and measured[j][1] <= measured[sel_idx][1]) and (measured[j][0] > measured[sel_idx][0] or measured[j][1] < measured[sel_idx][1])
         for j in eligible if j != sel_idx)
     c.record("OPT-05", len(pts) >= 3 and not wrong and sel_listed,
-             f"Pareto set needs 3+ candidates with dev quality, cost and correct 'dominated' flags, and the selected program must be listed and non-dominated among the eligible candidates (within cost, no protected regression) (flag mismatches: {', '.join(wrong[:4]) or 'none'}).",
-             f"{len(pts)} candidates compared; selection is on the frontier.")
+             _t("Pareto set needs 3+ candidates with dev quality, cost and correct 'dominated' flags, and the selected program must be listed and non-dominated among the eligible candidates (within cost, no protected regression) (flag mismatches: {v}).", v=', '.join(wrong[:4]) or 'none'),
+             _t('{n_pts} candidates compared; selection is on the frontier.', n_pts=len(pts)))
 
     if sprog is None or bprog is None or not test:
-        c.fail("OPT-06", "Cannot evaluate: missing selected or baseline program, or test split.")
+        c.fail("OPT-06", _t('Cannot evaluate: missing selected or baseline program, or test split.'))
     else:
         t_sel, t_base = score(sprog, list(test)), score(bprog, list(test))
         p_sel, p_base = score(sprog, list(test), PROTECTED), score(bprog, list(test), PROTECTED)
         problems = []
         if t_sel < t_base + MARGIN:
-            problems.append(f"held-out quality {t_sel:.2f} vs baseline {t_base:.2f} (needs +{MARGIN:.2f})")
+            problems.append(_t('held-out quality {t_sel:.2f} vs baseline {t_base:.2f} (needs +{MARGIN:.2f})', t_sel=t_sel, t_base=t_base, MARGIN=MARGIN))
         if p_sel < p_base:
-            problems.append(f"protected {PROTECTED} accuracy fell from {p_base:.2f} to {p_sel:.2f}")
+            problems.append(_t('protected {PROTECTED} accuracy fell from {p_base:.2f} to {p_sel:.2f}', PROTECTED=PROTECTED, p_base=p_base, p_sel=p_sel))
         if sprog.cost > MAX_COST:
-            problems.append(f"cost {sprog.cost} tokens exceeds {MAX_COST}")
-        c.record("OPT-06", not problems, "; ".join(problems) + ".", f"Held-out {t_base:.2f} -> {t_sel:.2f}; protected {p_base:.2f} -> {p_sel:.2f}; cost {sprog.cost}.")
+            problems.append(_t('cost {cost} tokens exceeds {MAX_COST}', cost=sprog.cost, MAX_COST=MAX_COST))
+        c.record("OPT-06", not problems, "; ".join(problems) + ".", _t('Held-out {t_base:.2f} -> {t_sel:.2f}; protected {p_base:.2f} -> {p_sel:.2f}; cost {cost}.', t_base=t_base, t_sel=t_sel, p_base=p_base, p_sel=p_sel, cost=sprog.cost))
         c.evidence.update({"test_baseline": t_base, "test_selected": t_sel, "protected_baseline": p_base, "protected_selected": p_sel, "cost": sprog.cost})
 
 
@@ -196,10 +197,41 @@ def probes(submission: Any) -> List[Dict[str, Any]]:
     gaming = SimProgram("I4")
     test = list(sp.get("test") or [])
     return [
-        {"id": "P1", "description": "The scalar-gaming candidate (I4) would be rejected by the protected-case rule",
+        {"id": "P1", "description": _t('The scalar-gaming candidate (I4) would be rejected by the protected-case rule'),
          "ok": bool(test) and score(gaming, test, PROTECTED) < score(SimProgram("I0"), test, PROTECTED)},
-        {"id": "P2", "description": "No trial in the log was scored on the test split", "ok": all(e.get("split") != "test" for e in submission.get("optimization_log") or [])},
+        {"id": "P2", "description": _t('No trial in the log was scored on the test split'), "ok": all(e.get("split") != "test" for e in submission.get("optimization_log") or [])},
     ]
 
 
 register(LAB, REQUIREMENTS, validate, probes)
+
+
+add_catalog({
+    "Splits must be disjoint, use known ids, cover >= 90% of the data, with test >= 15 and dev/train >= 10 (got train {n_train}, dev {n_dev}, test {n_test}{v}).":
+        "Las divisiones deben ser disjuntas, usar IDs conocidos y cubrir >= 90% de los datos, con test >= 15 y dev/train >= 10 (se obtuvo train {n_train}, dev {n_dev}, test {n_test}{v}).",
+    ", overlapping": ", y se solapan",
+    "train {n_train} / dev {n_dev} / test {n_test}, disjoint.": "train {n_train} / dev {n_dev} / test {n_test}, disjuntas.",
+    "Record the baseline program and the test score it actually achieves (recomputed value differs or is missing).":
+        "Registra el programa de línea base y la puntuación de test que consigue realmente (el valor recalculado difiere o falta).",
+    "Baseline recorded and reproducible.": "Línea base registrada y reproducible.",
+    "{n_complete} of {n_log} log entries are complete (program, split, score, cost); at least 5 trials are required.":
+        "{n_complete} de {n_log} entradas del registro están completas (program, split, score, cost); se necesitan al menos 5 intentos.",
+    "{n_log} trials logged.": "{n_log} intentos registrados.",
+    "The test set (or non-train demos) was used during tuning: {v}.": "Durante el ajuste se usó el conjunto de test (o demostraciones que no son de train): {v}.",
+    "Only train/dev were used for tuning.": "Para el ajuste solo se usaron train y dev.",
+    "Pareto set needs 3+ candidates with dev quality, cost and correct 'dominated' flags, and the selected program must be listed and non-dominated among the eligible candidates (within cost, no protected regression) (flag mismatches: {v}).":
+        "El conjunto de Pareto necesita 3 o más candidatos con calidad en dev, costo y marcas 'dominated' correctas, y el programa elegido debe aparecer en la lista y no estar dominado entre los candidatos admisibles (dentro del costo y sin regresión protegida) (marcas incorrectas: {v}).",
+    "{n_pts} candidates compared; selection is on the frontier.": "{n_pts} candidatos comparados; la elección está en la frontera.",
+    "selected program uses non-train demos": "el programa elegido usa demostraciones que no son de train",
+    "Cannot evaluate: missing selected or baseline program, or test split.":
+        "No se puede evaluar: falta el programa elegido, el de línea base o la división de test.",
+    "Held-out {t_base:.2f} -> {t_sel:.2f}; protected {p_base:.2f} -> {p_sel:.2f}; cost {cost}.":
+        "Conjunto reservado {t_base:.2f} -> {t_sel:.2f}; protegidos {p_base:.2f} -> {p_sel:.2f}; costo {cost}.",
+    "The scalar-gaming candidate (I4) would be rejected by the protected-case rule":
+        "El candidato que hace trampa con la métrica escalar (I4) sería rechazado por la regla de casos protegidos",
+    "No trial in the log was scored on the test split": "Ningún intento del registro se puntuó con la división de test",
+    "held-out quality {t_sel:.2f} vs baseline {t_base:.2f} (needs +{MARGIN:.2f})":
+        "calidad en el conjunto reservado {t_sel:.2f} frente a la línea base {t_base:.2f} (necesita +{MARGIN:.2f})",
+    "protected {PROTECTED} accuracy fell from {p_base:.2f} to {p_sel:.2f}": "la exactitud en los casos protegidos ({PROTECTED}) bajó de {p_base:.2f} a {p_sel:.2f}",
+    "cost {cost} tokens exceeds {MAX_COST}": "el costo de {cost} tokens supera {MAX_COST}",
+})

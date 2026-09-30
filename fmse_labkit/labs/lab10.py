@@ -25,6 +25,7 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional
 
 from ..core import Checker, call_learner, capture_output, register
+from ..i18n import add_catalog, t as _t
 
 LAB = "lab-10"
 MAX_STEPS = 8
@@ -153,17 +154,17 @@ def validate(submission: Any, c: Checker) -> None:
     run_agent = submission.get("run_agent")
 
     wrong = [t["name"] for t in TOOLS if (policy.get(t["name"]) or {}).get("mutability") != ("write" if t["name"] in MUTATING else "read")]
-    c.record("AGT-02", not wrong, f"Tool policy misdeclares or omits: {', '.join(wrong)}.", "Every tool is declared read or write correctly.")
+    c.record("AGT-02", not wrong, _t('Tool policy misdeclares or omits: {v}.', v=', '.join(wrong)), _t('Every tool is declared read or write correctly.'))
 
     if not callable(run_agent):
         for rid in ("AGT-01", "AGT-03", "AGT-04"):
-            c.fail(rid, "Submit run_agent(planner, server, approver, policy, max_steps).")
+            c.fail(rid, _t('Submit run_agent(planner, server, approver, policy, max_steps).'))
     else:
         results = {s: run_scenario(run_agent, policy, s) for s in SCRIPTS}
         srv, _, res, err = results["loop"]
         c.record("AGT-01", err is None and res.get("status") == "budget_exhausted" and srv.calls <= MAX_STEPS + 1,
-                 f"A planner that never stops made {srv.calls} server calls (budget {MAX_STEPS}) and returned {err or res.get('status')!r}; expected status 'budget_exhausted'.",
-                 f"Stopped at the {MAX_STEPS}-step budget.")
+                 _t("A planner that never stops made {calls} server calls (budget {MAX_STEPS}) and returned {v}; expected status 'budget_exhausted'.", calls=srv.calls, MAX_STEPS=MAX_STEPS, v=repr(err or res.get('status'))),
+                 _t('Stopped at the {MAX_STEPS}-step budget.', MAX_STEPS=MAX_STEPS))
 
         violations = []
         for s, (srv, appr, res, err) in results.items():
@@ -174,20 +175,20 @@ def validate(submission: Any, c: Checker) -> None:
         srv, _, res, err = results["normal"]
         approved_done = err is None and len(srv.mutations) == 1 and res.get("status") == "done"
         c.record("AGT-03", not violations and approved_done,
-                 f"Unauthorized mutation(s): {', '.join(violations[:4])}." if violations else "The approved rollback in the normal scenario did not execute exactly once with status 'done'.",
-                 "Only approved mutations executed, each with its own approval token.")
+                 _t('Unauthorized mutation(s): {v}.', v=', '.join(violations[:4])) if violations else _t("The approved rollback in the normal scenario did not execute exactly once with status 'done'."),
+                 _t('Only approved mutations executed, each with its own approval token.'))
 
         srv, _, res, err = results["tool_error"]
         log = json.dumps(res.get("log", ""), default=str)
         c.record("AGT-04", err is None and res.get("status") == "done" and "upstream_timeout" in log,
-                 f"On a tool error the agent returned {err or res.get('status')!r}" + ("" if "upstream_timeout" in log else " and its log does not record the error") + "; expected status 'done' with the error logged.",
-                 "Tool errors are logged and fed back; the run completes.")
+                 _t('On a tool error the agent returned {v}', v=repr(err or res.get('status'))) + ("" if "upstream_timeout" in log else _t(' and its log does not record the error')) + _t("; expected status 'done' with the error logged."),
+                 _t('Tool errors are logged and fed back; the run completes.'))
         c.evidence["mutations_executed"] = sum(len(r[0].mutations) for r in results.values())
 
     design = str((submission.get("design") or {}).get("state", "")) + " " + str((submission.get("design") or {}).get("description", ""))
-    ok = ("state_handle" in design or "state handle" in design.lower() or "stateless" in design.lower()) and len(design.split()) >= 20
-    c.record("AGT-05", ok, "The design must say (in 20+ words) whether state travels in an explicit state handle or the design is stateless, and where application state lives.",
-             "State design documented.")
+    ok = ("state_handle" in design or "state handle" in design.lower() or "stateless" in design.lower() or "sin estado" in design.lower() or "identificador de estado" in design.lower()) and len(design.split()) >= 20
+    c.record("AGT-05", ok, _t('The design must say (in 20+ words) whether state travels in an explicit state handle or the design is stateless, and where application state lives.'),
+             _t('State design documented.'))
 
 
 def read_only_agent(planner, server, max_steps=5):
@@ -209,13 +210,37 @@ def probes(submission: Any) -> List[Dict[str, Any]]:
     out = []
     # An unknown tool proposed by the planner must not be executed.
     srv, _, res, err = run_scenario(run_agent, policy, "normal", [("drop_database", {"name": "prod"}), ("final", {"summary": "x"})])
-    out.append({"id": "P1", "description": "A tool missing from the policy is refused, not called", "ok": err is None and "drop_database" not in srv.names})
+    out.append({"id": "P1", "description": _t('A tool missing from the policy is refused, not called'), "ok": err is None and "drop_database" not in srv.names})
     # Reusing an approval token for a different action must not work.
     script = [("rollback_deploy", {"service": "checkout-api", "to_version": "v2.14.1"}), ("rollback_deploy", {"service": "checkout-api", "to_version": "v1.0.0"}), ("final", {"summary": "x"})]
     srv, appr, res, err = run_scenario(run_agent, policy, "normal", script)
-    out.append({"id": "P2", "description": "An approval for one action cannot authorise a different action",
+    out.append({"id": "P2", "description": _t('An approval for one action cannot authorise a different action'),
                 "ok": err is None and all(appr.issued.get(m["approval_token"] or "", {}).get("arguments") == m["arguments"] for m in srv.mutations)})
     return out
 
 
 register(LAB, REQUIREMENTS, validate, probes)
+
+
+add_catalog({
+    "Tool policy misdeclares or omits: {v}.": "La política de herramientas declara mal u omite: {v}.",
+    "Every tool is declared read or write correctly.": "Cada herramienta está bien declarada como de lectura o de escritura.",
+    "The design must say (in 20+ words) whether state travels in an explicit state handle or the design is stateless, and where application state lives.":
+        "El diseño debe decir (en 20 palabras o más) si el estado viaja en un identificador de estado explícito o si el diseño es sin estado, y dónde vive el estado de la aplicación.",
+    "State design documented.": "Diseño del estado documentado.",
+    "A planner that never stops made {calls} server calls (budget {MAX_STEPS}) and returned {v}; expected status 'budget_exhausted'.":
+        "Un planificador que nunca se detiene hizo {calls} llamadas al servidor (presupuesto: {MAX_STEPS}) y devolvió {v}; se esperaba el estado 'budget_exhausted'.",
+    "Stopped at the {MAX_STEPS}-step budget.": "Se detuvo en el presupuesto de {MAX_STEPS} pasos.",
+    "Only approved mutations executed, each with its own approval token.":
+        "Solo se ejecutaron mutaciones aprobadas, cada una con su propio token de aprobación.",
+    "Tool errors are logged and fed back; the run completes.": "Los errores de herramienta se registran y se devuelven al agente; la ejecución termina.",
+    "A tool missing from the policy is refused, not called": "Una herramienta que no está en la política se rechaza, no se llama",
+    "An approval for one action cannot authorise a different action": "Una aprobación para una acción no puede autorizar otra distinta",
+    "Submit run_agent(planner, server, approver, policy, max_steps).": "Entrega run_agent(planner, server, approver, policy, max_steps).",
+    "Unauthorized mutation(s): {v}.": "Mutaciones no autorizadas: {v}.",
+    "The approved rollback in the normal scenario did not execute exactly once with status 'done'.":
+        "La marcha atrás aprobada del escenario normal no se ejecutó exactamente una vez con el estado 'done'.",
+    "; expected status 'done' with the error logged.": "; se esperaba el estado 'done' con el error registrado.",
+    "On a tool error the agent returned {v}": "Ante un error de herramienta, el agente devolvió {v}",
+    " and its log does not record the error": " y su registro no recoge el error",
+})

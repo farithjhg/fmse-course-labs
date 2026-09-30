@@ -16,7 +16,8 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
 from . import COURSE_ID, COURSE_VERSION, __version__
-from .core import CheckResult, lab_spec
+from .core import CheckResult, lab_spec, title as lab_title
+from .i18n import add_catalog, t
 from .secrets import contains_secret, redact
 
 RECORD_SCHEMA = "fmse.completion/v1"
@@ -62,16 +63,16 @@ class GuidedLog:
     def step(self, name: str) -> None:
         if name not in self.steps:
             self.steps.append(name)
-        print(f"  guided step recorded: {name}")
+        print(t("  guided step recorded: {name}", name=name))
 
     def predict(self, question_id: str, prediction: Any) -> None:
         """Record a prediction BEFORE running the experiment it is about."""
         if prediction in (None, "", "?"):
-            print(f"  prediction {question_id!r} is empty - write down what you expect before running the next cell.")
+            print(t("  prediction {qid} is empty - write down what you expect before running the next cell.", qid=repr(question_id)))
             return
         self.predictions = [p for p in self.predictions if p["id"] != question_id]
         self.predictions.append({"id": question_id, "prediction": str(prediction)[:500], "outcome": None})
-        print(f"  prediction recorded: {question_id}")
+        print(t("  prediction recorded: {qid}", qid=question_id))
 
     def outcome(self, question_id: str, outcome: Any) -> None:
         for p in self.predictions:
@@ -81,10 +82,10 @@ class GuidedLog:
     def observe(self, observations: Dict[str, str], min_chars: int = 20) -> bool:
         short = [k for k, v in observations.items() if len(str(v or "").strip()) < min_chars]
         if short:
-            print(f"  observations too short to count: {', '.join(short)} (write at least a sentence each)")
+            print(t("  observations too short to count: {fields} (write at least a sentence each)", fields=", ".join(short)))
             return False
         self.observations = {k: redact(str(v))[:1500] for k, v in observations.items()}
-        print("  observations recorded")
+        print(t("  observations recorded"))
         return True
 
     @property
@@ -92,11 +93,11 @@ class GuidedLog:
         return all(s in self.steps for s in self.required_steps) and bool(self.predictions) and bool(self.observations)
 
     def missing(self) -> List[str]:
-        out = [f"step '{s}'" for s in self.required_steps if s not in self.steps]
+        out = [t("step '{s}'", s=s) for s in self.required_steps if s not in self.steps]
         if not self.predictions:
-            out.append("at least one prediction")
+            out.append(t("at least one prediction"))
         if not self.observations:
-            out.append("worksheet observations")
+            out.append(t("worksheet observations"))
         return out
 
     def to_dict(self) -> Dict[str, Any]:
@@ -141,7 +142,7 @@ def export_artifact(
     text = _serialise(artifact, fmt)
     leaked = contains_secret(text)
     if leaked:
-        print("  WARNING: the artifact contained credential-shaped text; it was redacted before export.")
+        print(t("  WARNING: the artifact contained credential-shaped text; it was redacted before export."))
         text = redact(text)
     ext = {"yaml": "yaml", "markdown": "md", "json": "json", "python": "py"}.get(fmt, "txt")
     folder = Path(out_dir) / spec.lab_id
@@ -151,7 +152,7 @@ def export_artifact(
     truncated = len(text) > MAX_ARTIFACT_CHARS
     described = {
         "type": artifact_type or spec.artifact_type,
-        "title": (title or spec.title)[:160],
+        "title": (title or lab_title(spec))[:160],
         "format": fmt,
         "content": None if truncated else text,
         "reference": str(path),
@@ -160,8 +161,8 @@ def export_artifact(
         "truncated": truncated,
         "redacted": bool(leaked),
     }
-    note = " (too large to embed; the record references the file)" if truncated else ""
-    print(f"  artifact exported: {path}{note}")
+    note = t(" (too large to embed; the record references the file)") if truncated else ""
+    print(t("  artifact exported: {path}{note}", path=path, note=note))
     return described
 
 
@@ -215,9 +216,9 @@ def make_completion_record(
     size = len(json.dumps(record).encode())
     if size > MAX_RECORD_BYTES and artifact and artifact.get("content"):
         record["artifact"] = {**artifact, "content": None, "truncated": True}
-        print("  record too large for the portal; artifact content replaced by its file reference.")
+        print(t("  record too large for the portal; artifact content replaced by its file reference."))
     if guided and not guided.completed:
-        print(f"  note: guided lab not complete yet - missing {', '.join(guided.missing())}.")
+        print(t("  note: guided lab not complete yet - missing {items}.", items=", ".join(guided.missing())))
     return record
 
 
@@ -232,10 +233,10 @@ def show_record(record: Dict[str, Any], download: bool = True) -> str:
     """Print the record between markers for copy/paste, and offer a download in Colab."""
     text = json.dumps(record, ensure_ascii=False, separators=(",", ":"))
     path = save_record(record)
-    status = "PASSED" if record["passed"] else "NOT PASSED"
-    print(f"Completion record for {record['lab_id']} ({status}, score {record['score']:.0%}) saved to {path}")
-    print("Copy everything between the markers (markers included) and paste it into")
-    print(f"agentic-ai.es/academy/fmse/learn/{record['module_id']} -> 'Import lab result'.\n")
+    status = t("PASSED") if record["passed"] else t("NOT PASSED")
+    print(t("Completion record for {lab} ({status}, score {score}) saved to {path}", lab=record["lab_id"], status=status, score=f"{record['score']:.0%}", path=path))
+    print(t("Copy everything between the markers (markers included) and paste it into"))
+    print(t("agentic-ai.es/academy/fmse/learn/{module} -> 'Import lab result'.", module=record["module_id"]) + "\n")
     print(BEGIN_MARKER)
     print(text)
     print(END_MARKER)
@@ -247,3 +248,23 @@ def show_record(record: Dict[str, Any], download: bool = True) -> str:
         except Exception:  # noqa: BLE001 - not in Colab, or downloads blocked
             pass
     return text
+
+
+add_catalog({
+    "  guided step recorded: {name}": "  paso guiado registrado: {name}",
+    "  prediction {qid} is empty - write down what you expect before running the next cell.": "  la predicción {qid} está vacía: anota qué esperas que pase antes de ejecutar la siguiente celda.",
+    "  prediction recorded: {qid}": "  predicción registrada: {qid}",
+    "  observations too short to count: {fields} (write at least a sentence each)": "  observaciones demasiado breves para tenerlas en cuenta: {fields} (escribe al menos una oración en cada una)",
+    "  observations recorded": "  observaciones registradas",
+    "step '{s}'": "el paso '{s}'",
+    "at least one prediction": "al menos una predicción",
+    "worksheet observations": "las observaciones de la hoja de trabajo",
+    "  WARNING: the artifact contained credential-shaped text; it was redacted before export.": "  AVISO: el artefacto contenía texto que parecía una credencial; se enmascaró antes de exportarlo.",
+    " (too large to embed; the record references the file)": " (demasiado grande para incrustarlo; el registro remite al archivo)",
+    "  artifact exported: {path}{note}": "  artefacto exportado: {path}{note}",
+    "  record too large for the portal; artifact content replaced by its file reference.": "  registro demasiado grande para el portal; el contenido del artefacto se reemplazó por la referencia a su archivo.",
+    "  note: guided lab not complete yet - missing {items}.": "  nota: el laboratorio guiado todavía no está completo; falta: {items}.",
+    "Completion record for {lab} ({status}, score {score}) saved to {path}": "Registro de finalización de {lab} ({status}, puntuación {score}) guardado en {path}",
+    "Copy everything between the markers (markers included) and paste it into": "Copia todo lo que hay entre los marcadores (incluidos los marcadores) y pégalo en",
+    "agentic-ai.es/academy/fmse/learn/{module} -> 'Import lab result'.": "agentic-ai.es/academy/fmse/learn/{module} -> 'Importar el resultado del laboratorio'.",
+})

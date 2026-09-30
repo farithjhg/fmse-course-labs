@@ -18,7 +18,7 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "tools"))
 
 import fmse_labkit as fmse  # noqa: E402
-from build_notebooks import CANONICAL_SECTIONS  # noqa: E402
+from build_notebooks import CANONICAL_SECTIONS, CANONICAL_SECTIONS_ES  # noqa: E402
 from run_notebook import run_notebook  # noqa: E402
 
 # Registry key -> spec. Capstone milestones share lab_id "capstone" and are addressed by their key.
@@ -40,7 +40,7 @@ class NotebookStructure(unittest.TestCase):
     def test_capstone_datasets_match_labkit(self):
         from fmse_labkit.labs import capstone
         for name, text in (("bank_export.csv", capstone.BANK_CSV), ("ledger_entries.csv", capstone.LEDGER_CSV), ("vendor_master.csv", capstone.VENDORS_CSV)):
-            self.assertEqual((ROOT / "capstone" / "datasets" / name).read_text(), text, name)
+            self.assertEqual((ROOT / "capstone" / "datasets" / name).read_text(encoding="utf-8"), text, name)
 
     def test_every_registered_lab_has_its_notebook(self):
         for spec in fmse.LAB_SPECS.values():
@@ -49,39 +49,52 @@ class NotebookStructure(unittest.TestCase):
 
     def test_canonical_sections_in_order(self):
         for spec in fmse.LAB_SPECS.values():
-            nb = json.loads((ROOT / spec.notebook).read_text())
-            md = "\n".join("".join(c["source"]) for c in nb["cells"] if c["cell_type"] == "markdown")
-            positions = [md.find("\n" + s) for s in CANONICAL_SECTIONS]
+            for path, sections in ((spec.notebook, CANONICAL_SECTIONS), (spec.notebook.replace(".ipynb", ".es.ipynb"), CANONICAL_SECTIONS_ES)):
+                nb = json.loads((ROOT / path).read_text(encoding="utf-8"))
+                md = "\n".join("".join(c["source"]) for c in nb["cells"] if c["cell_type"] == "markdown")
+                positions = [md.find("\n" + s) for s in sections]
+                with self.subTest(notebook=path):
+                    self.assertNotIn(-1, positions)
+                    self.assertEqual(positions, sorted(positions))
+                    self.assertTrue(md.startswith(f"# FMSE "), "title line")
+
+    def test_every_notebook_has_a_spanish_version(self):
+        for spec in fmse.LAB_SPECS.values():
             with self.subTest(lab=spec.lab_id):
-                self.assertNotIn(-1, positions)
-                self.assertEqual(positions, sorted(positions))
-                self.assertTrue(md.startswith(f"# FMSE "), "title line")
+                self.assertTrue((ROOT / spec.notebook.replace(".ipynb", ".es.ipynb")).exists())
+                setup = json.loads((ROOT / spec.notebook.replace(".ipynb", ".es.ipynb")).read_text(encoding="utf-8"))["cells"]
+                self.assertTrue(any('fmse.set_language("es")' in "".join(c["source"]) for c in setup if c["cell_type"] == "code"))
 
     def test_notebooks_have_no_outputs_or_secrets(self):
-        for path in (ROOT / "labs").glob("*.ipynb"):
-            nb = json.loads(path.read_text())
+        for path in [*(ROOT / "labs").glob("*.ipynb"), *(ROOT / "capstone").glob("*.ipynb")]:
+            nb = json.loads(path.read_text(encoding="utf-8"))
             for cell in nb["cells"]:
                 if cell["cell_type"] == "code":
                     self.assertEqual(cell["outputs"], [], f"{path.name} has committed outputs")
-            self.assertEqual(fmse.secrets.contains_secret(path.read_text()), [], path.name)
+            self.assertEqual(fmse.secrets.contains_secret(path.read_text(encoding="utf-8")), [], path.name)
 
 
 class StarterNotebooksFailSafely(unittest.TestCase):
     """Run every notebook untouched: it must execute end to end and export a NOT PASSED record."""
 
+    def tearDown(self):
+        fmse.set_language("en")
+
     def test_run_starter_notebooks(self):
         for _key, spec in IMPLEMENTED:
             if spec.milestone_id:
                 continue  # milestones live in the capstone notebook, checked via its package record
-            with self.subTest(lab=spec.lab_id):
-                ns = run_notebook(ROOT / spec.notebook)
-                record = json.loads((ns["__workdir__"] / "fmse_artifacts" / spec.lab_id / "completion-record.json").read_text())
-                self.assertEqual(RECORD_KEYS, set(record))
-                self.assertEqual(record["lab_id"], spec.lab_id)
-                self.assertEqual(record["module_id"], spec.module_id)
-                self.assertFalse(record["passed"])
-                self.assertFalse(record["guided"]["completed"])
-                self.assertIn("BEGIN FMSE COMPLETION RECORD", ns["__stdout__"])
+            for notebook in (spec.notebook, spec.notebook.replace(".ipynb", ".es.ipynb")):
+                with self.subTest(notebook=notebook):
+                    ns = run_notebook(ROOT / notebook)
+                    fmse.set_language("en")
+                    record = json.loads((ns["__workdir__"] / "fmse_artifacts" / spec.lab_id / "completion-record.json").read_text(encoding="utf-8"))
+                    self.assertEqual(RECORD_KEYS, set(record))
+                    self.assertEqual(record["lab_id"], spec.lab_id)
+                    self.assertEqual(record["module_id"], spec.module_id)
+                    self.assertFalse(record["passed"])
+                    self.assertFalse(record["guided"]["completed"])
+                    self.assertIn("BEGIN FMSE COMPLETION RECORD", ns["__stdout__"])
 
 
 class ValidatorsFailSafely(unittest.TestCase):
@@ -126,7 +139,7 @@ class SecretsNeverLeak(unittest.TestCase):
                 art = fmse.export_artifact("lab-00", f"## Intent\nuse {self.KEY}", out_dir=d)
             self.assertTrue(art["redacted"])
             self.assertNotIn(self.KEY, art["content"])
-            self.assertNotIn(self.KEY, Path(art["reference"]).read_text())
+            self.assertNotIn(self.KEY, Path(art["reference"]).read_text(encoding="utf-8"))
 
     def test_secrets_check_prints_presence_only(self):
         os.environ["OPENAI_API_KEY"] = self.KEY
@@ -148,6 +161,51 @@ class SecretsNeverLeak(unittest.TestCase):
         with contextlib.redirect_stdout(io.StringIO()):
             out = fmse.submit_remote("lab-00", {"x": 1}, endpoint="http://127.0.0.1:9/unreachable")
         self.assertIsNone(out)
+
+
+class SpanishMessages(unittest.TestCase):
+    """Every learner-facing message has a Spanish version with the same placeholders."""
+
+    @staticmethod
+    def templates():
+        import ast
+        found = set()
+        for path in (ROOT / "fmse_labkit").rglob("*.py"):
+            for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+                if (isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id in ("t", "_t")
+                        and node.args and isinstance(node.args[0], ast.Constant) and isinstance(node.args[0].value, str)):
+                    found.add(node.args[0].value)
+        for spec in fmse.LAB_SPECS.values():
+            found.add(spec.title)
+            for text, _dim, _crit, hint in spec.requirements.values():
+                found.update(x for x in (text, hint) if x)
+        return found
+
+    def test_every_message_is_translated(self):
+        from fmse_labkit.i18n import catalog
+        missing = sorted(self.templates() - set(catalog()))
+        self.assertEqual(missing, [], "add these to an add_catalog block (or run scripts/fmse/sync_labkit_translations.py)")
+
+    def test_placeholders_match(self):
+        import string
+        from fmse_labkit.i18n import catalog
+        names = lambda s: sorted(f for _, f, _, _ in string.Formatter().parse(s) if f)
+        for en, es in catalog().items():
+            with self.subTest(en=en[:60]):
+                self.assertEqual(names(en), names(es))
+
+    def test_language_switch(self):
+        try:
+            fmse.set_language("es")
+            self.assertEqual(fmse.t("Requirement met."), "Requisito cumplido.")
+            self.assertEqual(fmse.title(fmse.lab_spec("lab-00")), "Laboratorio de planteamiento de tareas")
+            result = fmse.check_public("lab-01", None)
+            self.assertTrue(all(c.message and c.hint for c in result.checks))
+            self.assertIn("Entrega un dict", result.checks[0].message)
+        finally:
+            fmse.set_language("en")
+        self.assertEqual(fmse.t("Requirement met."), "Requirement met.")
+        self.assertEqual(fmse.set_language("fr"), "en", "unsupported languages fall back to English")
 
 
 class LargeArtifacts(unittest.TestCase):

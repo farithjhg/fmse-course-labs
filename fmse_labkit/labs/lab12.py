@@ -18,6 +18,7 @@ import re
 from typing import Any, Callable, Dict, List
 
 from ..core import Checker, call_learner, capture_output, register
+from ..i18n import add_catalog, t as _t
 
 LAB = "lab-12"
 CATEGORIES = ("correctness", "robustness", "schema", "injection", "edge_case")
@@ -158,12 +159,12 @@ def validate(submission: Any, c: Checker) -> None:
     ok_items = [g for g in golden if g.get("id") and g.get("input") and g.get("category") in CATEGORIES and g.get("severity") in ("low", "medium", "high", "critical") and "expected" in g]
     cats = {g["category"] for g in ok_items}
     c.record("EVL-01", len(ok_items) >= 12 and len(cats) >= 4 and len(ok_items) == len(golden),
-             f"{len(ok_items)} of {len(golden)} golden items are well-formed (id, input, expected, category, severity) across {len(cats)} categories; need 12+ items and 4+ categories ({', '.join(CATEGORIES)}).",
-             f"{len(ok_items)} categorized golden items across {len(cats)} categories.")
+             _t('{n_ok_items} of {n_golden} golden items are well-formed (id, input, expected, category, severity) across {n_cats} categories; need 12+ items and 4+ categories ({v}).', n_ok_items=len(ok_items), n_golden=len(golden), n_cats=len(cats), v=', '.join(CATEGORIES)),
+             _t('{n_ok_items} categorized golden items across {n_cats} categories.', n_ok_items=len(ok_items), n_cats=len(cats)))
 
     types = {s.get("type") for s in (submission.get("scorers") or []) if isinstance(s, dict) and callable(s.get("fn"))}
-    c.record("EVL-02", len(types & set(SCORER_TYPES)) >= 3, f"Found scorer types {sorted(t for t in types if t)}; need at least 3 distinct types from {', '.join(SCORER_TYPES)}, each with a callable 'fn'.",
-             f"{len(types)} scorer types.")
+    c.record("EVL-02", len(types & set(SCORER_TYPES)) >= 3, _t("Found scorer types {v}; need at least 3 distinct types from {v2}, each with a callable 'fn'.", v=sorted(t for t in types if t), v2=', '.join(SCORER_TYPES)),
+             _t('{n_types} scorer types.', n_types=len(types)))
 
     transforms = [t for t in (submission.get("transforms") or []) if isinstance(t, dict) and callable(t.get("fn"))]
     broken = []
@@ -178,21 +179,21 @@ def validate(submission: Any, c: Checker) -> None:
         if not changed and t.get("name", "?") not in broken:
             broken.append(f"{t.get('name', '?')} (changes nothing)")
     c.record("EVL-03", len(transforms) >= 3 and not broken,
-             f"{len(transforms)} transformation(s); need 3+ that change the text but not the correct extraction (not invariant: {', '.join(broken) or 'none'}).",
-             f"{len(transforms)} invariant metamorphic transformations.")
+             _t('{n_transforms} transformation(s); need 3+ that change the text but not the correct extraction (not invariant: {v}).', n_transforms=len(transforms), v=', '.join(broken) or 'none'),
+             _t('{n_transforms} invariant metamorphic transformations.', n_transforms=len(transforms)))
 
     trace = submission.get("traceability") or {}
     ids = {g.get("id") for g in golden}
     critical = [r for r, (_, crit) in CLAIM_REQUIREMENTS.items() if crit]
     untraced = [r for r in critical if not [t for t in trace.get(r, []) if t in ids]]
-    c.record("EVL-04", not untraced, f"Critical requirement(s) without a test in the golden set: {', '.join(untraced)}.", "Every critical requirement maps to existing tests.")
+    c.record("EVL-04", not untraced, _t('Critical requirement(s) without a test in the golden set: {v}.', v=', '.join(untraced)), _t('Every critical requirement maps to existing tests.'))
 
     scen = [s for s in (submission.get("validation_scenarios") or []) if isinstance(s, dict) and all(str(s.get(k, "")).strip() for k in ("moe", "scenario", "users", "measure"))]
-    c.record("EVL-05", bool(scen), "Define at least one validation scenario with moe, scenario, users and measure.", f"{len(scen)} validation scenario(s).")
+    c.record("EVL-05", bool(scen), _t('Define at least one validation scenario with moe, scenario, users and measure.'), _t('{n_scen} validation scenario(s).', n_scen=len(scen)))
 
     run_suite = submission.get("run_suite")
     if not callable(run_suite):
-        c.fail("EVL-06", "Submit run_suite(system) -> {'passed': bool, 'failures': [...]}.")
+        c.fail("EVL-06", _t("Submit run_suite(system) -> {'passed': bool, 'failures': [...]}."))
         return
     with capture_output():
         base, err = call_learner(run_suite, reference_system)
@@ -203,8 +204,8 @@ def validate(submission: Any, c: Checker) -> None:
     false_alarm = err is not None or not isinstance(base, dict) or base.get("passed") is not True
     rate = len(caught) / len(MUTANTS)
     c.record("EVL-06", not false_alarm and rate >= 0.9,
-             ("Your suite fails the correct system (false alarm). " if false_alarm else "") + f"Detected {len(caught)}/{len(MUTANTS)} planted faults ({rate:.0%}); surviving: {', '.join(survived) or 'none'}.",
-             f"Detected {len(caught)}/{len(MUTANTS)} planted faults ({rate:.0%}) with no false alarm.")
+             (_t('Your suite fails the correct system (false alarm). ') if false_alarm else "") + _t('Detected {n_caught}/{n_MUTANTS} planted faults ({rate:.0%}); surviving: {v}.', n_caught=len(caught), n_MUTANTS=len(MUTANTS), rate=rate, v=', '.join(survived) or 'none'),
+             _t('Detected {n_caught}/{n_MUTANTS} planted faults ({rate:.0%}) with no false alarm.', n_caught=len(caught), n_MUTANTS=len(MUTANTS), rate=rate))
     c.evidence.update({"fault_detection": round(rate, 3), "surviving_mutants": len(survived)})
 
 
@@ -216,9 +217,35 @@ def probes(submission: Any) -> List[Dict[str, Any]]:
         r1, _ = call_learner(run_suite, lambda t: reference_system(t) + reference_system(t))
         r2, _ = call_learner(run_suite, lambda t: [])
     return [
-        {"id": "P1", "description": "A system that duplicates every claim is caught", "ok": isinstance(r1, dict) and r1.get("passed") is False},
-        {"id": "P2", "description": "A system that returns nothing is caught", "ok": isinstance(r2, dict) and r2.get("passed") is False},
+        {"id": "P1", "description": _t('A system that duplicates every claim is caught'), "ok": isinstance(r1, dict) and r1.get("passed") is False},
+        {"id": "P2", "description": _t('A system that returns nothing is caught'), "ok": isinstance(r2, dict) and r2.get("passed") is False},
     ]
 
 
 register(LAB, REQUIREMENTS, validate, probes)
+
+
+add_catalog({
+    "{n_ok_items} of {n_golden} golden items are well-formed (id, input, expected, category, severity) across {n_cats} categories; need 12+ items and 4+ categories ({v}).":
+        "{n_ok_items} de {n_golden} elementos del conjunto de referencia están bien formados (id, input, expected, category, severity) en {n_cats} categorías; se necesitan 12 o más elementos y 4 o más categorías ({v}).",
+    "{n_ok_items} categorized golden items across {n_cats} categories.": "{n_ok_items} elementos de referencia categorizados en {n_cats} categorías.",
+    "Found scorer types {v}; need at least 3 distinct types from {v2}, each with a callable 'fn'.":
+        "Tipos de evaluador encontrados: {v}; se necesitan al menos 3 tipos distintos de {v2}, cada uno con una función 'fn' invocable.",
+    "{n_types} scorer types.": "{n_types} tipos de evaluador.",
+    "{n_transforms} transformation(s); need 3+ that change the text but not the correct extraction (not invariant: {v}).":
+        "{n_transforms} transformación(es); se necesitan 3 o más que cambien el texto sin cambiar la extracción correcta (no invariantes: {v}).",
+    "{n_transforms} invariant metamorphic transformations.": "{n_transforms} transformaciones metamórficas invariantes.",
+    "Critical requirement(s) without a test in the golden set: {v}.": "Requisitos críticos sin ninguna prueba en el conjunto de referencia: {v}.",
+    "Every critical requirement maps to existing tests.": "Cada requisito crítico se corresponde con pruebas existentes.",
+    "Define at least one validation scenario with moe, scenario, users and measure.":
+        "Define al menos un escenario de validación con moe, scenario, users y measure.",
+    "{n_scen} validation scenario(s).": "{n_scen} escenario(s) de validación.",
+    "Detected {n_caught}/{n_MUTANTS} planted faults ({rate:.0%}) with no false alarm.":
+        "Se detectaron {n_caught}/{n_MUTANTS} fallos sembrados a propósito ({rate:.0%}) sin ninguna falsa alarma.",
+    "Submit run_suite(system) -> {'passed': bool, 'failures': [...]}.": "Entrega run_suite(system) -> {'passed': bool, 'failures': [...]}.",
+    "Detected {n_caught}/{n_MUTANTS} planted faults ({rate:.0%}); surviving: {v}.":
+        "Se detectaron {n_caught}/{n_MUTANTS} fallos sembrados a propósito ({rate:.0%}); sobreviven: {v}.",
+    "A system that duplicates every claim is caught": "Se detecta un sistema que duplica cada reclamación",
+    "A system that returns nothing is caught": "Se detecta un sistema que no devuelve nada",
+    "Your suite fails the correct system (false alarm). ": "Tu conjunto de pruebas hace fallar al sistema correcto (falsa alarma). ",
+})

@@ -32,10 +32,14 @@ export) and runs **offline** on a free runtime: model behaviour comes from docum
 unless you configure your own provider in Colab Secrets (`FMSE_PROVIDER`, `FMSE_MODEL` and a key).
 Keys are never printed or exported.
 
+**En español:** every notebook has a Spanish version next to it (`labs/lab-NN-*.es.ipynb`,
+`capstone/capstone-studio.es.ipynb`), with Spanish explanations and validator feedback. Code and
+data keys stay English, and answers may be written in either language.
+
 Public validators report which requirement failed and why, never the expected implementation. The
 completion record each notebook prints is a learning-workflow document, not a certificate.
 
-Maintainers: edit `labsrc/*.lab`, then `python3 tools/build_notebooks.py`; test with
+Maintainers: edit `labsrc/*.lab` and its Spanish twin in `labsrc/es/`, then `python3 tools/build_notebooks.py`; test with
 `python3 -m unittest discover -s tests`. The source of truth is the `fmse-course-labs/` folder of
 the portal repository, published here with `scripts/fmse/publish-labs.sh`; changes made directly in
 this repository are overwritten by the next publish.

@@ -1,0 +1,156 @@
+#! lab_id: lab-03 output: labs/lab-03-ai-fmea.es.ipynb
+%%md
+# FMSE Laboratorio 03 - Banco de trabajo de requisitos y AI-FMEA
+
+**Curso:** FMSE 2026 · **Módulo 3:** Ingeniería de requisitos y AI-FMEA · **Fase:** Definir · **Nivel:** Profesional
+
+Página del curso y progreso: [agentic-ai.es/academy/fmse/learn/m03-requirements-fmea](https://agentic-ai.es/academy/fmse/learn/m03-requirements-fmea).
+
+> **Sobre el idioma.** Las claves de los datos se quedan en inglés, y el escenario de ejemplo también. Los valores puedes escribirlos en español: un requisito puede decir "deberá" en lugar de "shall", la `category` puede ser "funcional", "rendimiento", "interfaz", "seguridad", "costo" u "operativo", y el `verification_method` puede ser "prueba", "análisis", "inspección" o "demostración".
+
+%%md
+## 0. Misión y competencia objetivo
+
+**Misión.** Analizar un asistente que lleva el proceso de la factura al pago y en el que se han sembrado modos de fallo a propósito. Entregar 12 requisitos o más y un AI-FMEA que cubra al menos 10 modos de fallo, entre ellos la inyección indirecta de prompts y la agencia excesiva.
+
+**Laboratorio guiado.** Escribes requisitos en YAML, calculas valores de RPN y pasas un linter que comprueba que los IDs sean únicos, que cada requisito tenga sus metadatos de verificabilidad y que la trazabilidad esté completa.
+
+**Competencia objetivo (resultados del Módulo 3):**
+- Escribir requisitos necesarios, claros, viables, sin ambigüedad y verificables.
+- Construir una trazabilidad bidireccional, de la necesidad de la parte interesada al requisito y del requisito a su método de verificación.
+- Hacer un análisis de modos de fallo y efectos para IA (AI-FMEA), usando la gravedad, la ocurrencia y la detección como una técnica más para priorizar riesgos.
+- Diseñar mitigaciones fuera del modelo cuando lo que corresponde es un control determinista.
+
+**Guía:** alrededor de un 50% guiado y un 50% por tu cuenta. Es un **reto de diseño**: la parte guiada te da un camino de referencia que funciona; el reto, no.
+
+%%md
+## 1. Requisitos y criterios de aceptación
+
+Los validadores públicos comprueban estos requisitos. Te dicen qué requisito falló y por qué, nunca la implementación que se esperaba.
+
+| ID | Requisito |
+| --- | --- |
+| REQ-01 | Cada requisito tiene ID, enunciado, justificación y método de verificación |
+| REQ-02 | No hay IDs duplicados |
+| REQ-03 | Hay al menos un requisito en cada categoría obligatoria |
+| REQ-04 | La aritmética del RPN es correcta |
+| REQ-05 | Cada fallo de gravedad alta tiene al menos una mitigación y un enlace a su verificación **(crítico)** |
+| REQ-06 | Al menos 12 requisitos y 10 modos de fallo, incluidos la inyección indirecta de prompts y la agencia excesiva |
+
+**Control de competencia (portal):** el artefacto PASA; revisión por pares o de diseño; cuestionario >= 80%. También necesitas el laboratorio guiado, el artefacto y tu reflexión. Un requisito crítico no se compensa con otras puntuaciones.
+
+%%md
+## 2. Preparación del entorno
+
+%%setup
+%%md
+## 3. Comprobación de secretos
+
+Este laboratorio funciona completamente sin conexión: no necesitas ninguna clave de proveedor. Las claves que uses en otros laboratorios van en los Secretos de Colab y nunca se imprimen.
+
+%%code
+fmse.secrets_check()
+%%md
+## 4. Experimento guiado
+
+El punto de partida de abajo es el YAML de requisitos del asistente de la factura al pago, con defectos sembrados a propósito. El linter aplica las mismas comprobaciones públicas que califican el reto.
+
+%%code
+import copy
+from fmse_labkit.labs import lab03
+import yaml
+
+guided = fmse.GuidedLog(LAB_ID, required_steps=["lint_starter", "compute_rpn", "starter_fixed"])
+print(lab03.SCENARIO, "\n")
+starter = yaml.safe_load(lab03.GUIDED_STARTER)
+print(lab03.GUIDED_STARTER)
+%%md
+## 5. Predice antes de ejecutar
+
+¿Cuáles de los requisitos REQ-01 a REQ-06 va a incumplir el punto de partida, y por qué? Escribe tu predicción y después ejecuta el experimento.
+
+%%code
+my_prediction = ""
+guided.predict("prediction", my_prediction)
+%%code
+lab03.lint(starter)
+guided.step("lint_starter")
+row = starter["fmea"][0]
+print("RPN recalculado para", row["id"], "=", lab03.rpn(row["severity"], row["occurrence"], row["detection"]), "(registrado:", row["rpn"], ")")
+guided.step("compute_rpn")
+guided.outcome("prediction", "ver la salida de arriba")
+%%md
+Corrige el punto de partida en la celda siguiente: IDs únicos, un método de verificación en cada requisito, el RPN bien calculado y, para FM-01, una mitigación con su enlace de verificación. La corrección se da por buena cuando pasan las comprobaciones de unicidad (REQ-02), verificabilidad (REQ-01) y RPN (REQ-04).
+
+%%code
+guided_fixed = copy.deepcopy(starter)  # edita esta copia
+guided_result = fmse.check_public(LAB_ID, guided_fixed)
+if all(ch.status == "pass" for ch in guided_result.checks if ch.id in ("REQ-01", "REQ-02", "REQ-04")):
+    guided.step("starter_fixed")
+    print("Punto de partida corregido: pasan las comprobaciones de unicidad, verificabilidad y RPN.")
+else:
+    print("Todavía no:", [ch.id for ch in guided_result.checks if ch.status == "fail" and ch.id in ("REQ-01", "REQ-02", "REQ-04")])
+%%md
+**Hoja de trabajo.** Al menos una frase completa por campo: estas observaciones forman parte de la evidencia de tu laboratorio guiado.
+
+%%code
+worksheet = {
+    "lint_findings": "",
+    "rpn_reflection": "",
+    "prediction_check": "",
+}
+guided.observe(worksheet)
+%%md
+## 6. Reto
+
+**Asistente de la factura al pago: requisitos y AI-FMEA.** Analiza un asistente que lleva el proceso de la factura al pago y en el que se han sembrado modos de fallo a propósito. Entrega 12 requisitos o más y un AI-FMEA que cubra al menos 10 modos de fallo, entre ellos la inyección indirecta de prompts y la agencia excesiva.
+
+Restricciones:
+- Cada requisito es una sola obligación con "deberá" (o "shall"), con su justificación y su método de verificación.
+- La gravedad, la ocurrencia y la detección se puntúan de 1 a 10; una gravedad de 8 o más es alta.
+
+%%code
+my_spec = {
+    "requirements": [],  # {id, category, statement ("deberá" / "shall"), rationale, verification_method}
+    "fmea": [],  # {id, failure_mode, effect, severity, occurrence, detection, rpn, mitigations, verification}
+}
+%%md
+## 7. Validación pública
+
+%%code
+submission = my_spec
+result = fmse.check_public(LAB_ID, submission)
+result.show()
+%%md
+## 8. Robustez / pruebas adversariales
+
+Condiciones adversariales que la batería calificada no cubre. No cambian tu puntuación: te enseñan dónde es frágil tu solución.
+
+%%code
+probe_results = fmse.probe(LAB_ID, submission)
+%%md
+## 9. Reflexión de ingeniería
+
+Se califica en el portal y se guarda con tu artefacto. Si te sirve, haz aquí un borrador:
+- **Decisión:** ¿qué modo de fallo consideraste el más importante y qué capa de control elegiste para él?
+- **Compromisos:** ¿dónde un control determinista te costó usabilidad o capacidad de proceso, y por qué aceptas ese costo?
+- **Riesgos pendientes:** ¿qué riesgos quedan después de mitigar y cómo los vas a detectar en operación?
+
+%%code
+reflection_draft = {"decision": "", "tradeoffs": "", "remaining_risks": ""}
+%%md
+## 10. Exportar el artefacto / resultado de finalización
+
+Exporta el artefacto **Especificación de requisitos del sistema, matriz de trazabilidad y AI-FMEA** e imprime un registro de finalización. Pega el registro en la página del Módulo 3 de agentic-ai.es (**Importar el resultado del laboratorio**). El registro es un documento del flujo de aprendizaje, no un certificado firmado.
+
+%%code
+artifact = fmse.export_artifact(LAB_ID, my_spec, title="Especificación de requisitos del sistema, matriz de trazabilidad y AI-FMEA", fmt="yaml")
+record = fmse.make_completion_record(
+    LAB_ID,
+    result,
+    {"reflection_draft": reflection_draft, **{}},
+    artifact=artifact,
+    guided=guided,
+    probes=probe_results,
+)
+fmse.show_record(record)

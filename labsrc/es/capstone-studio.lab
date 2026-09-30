@@ -1,0 +1,171 @@
+#! lab_id: capstone output: capstone/capstone-studio.es.ipynb
+%%md
+# FMSE Proyecto final - Estudio del proyecto final: sistema de IA empresarial de alta fiabilidad
+
+**Curso:** FMSE 2026 · **Módulo 16:** Proyecto final · **Fase:** Proyecto final · **Nivel:** Arquitectura
+
+La página del curso, el seguimiento de los hitos y el paquete de defensa están en [agentic-ai.es/academy/fmse/capstone](https://agentic-ai.es/academy/fmse/capstone).
+
+> **Sobre el idioma.** Las explicaciones y los mensajes de los validadores están en español. El código, las claves de los datos, las secciones del paquete (`define`, `research`, ...) y los conjuntos de datos de referencia se quedan en inglés (son lo que leen los validadores). Puedes escribir el contenido de tu paquete en español o en inglés.
+
+%%md
+## 0. Misión y competencia objetivo
+
+**Misión.** Construir un asistente empresarial de conciliación financiera a partir de los requisitos y la evidencia: importar extractos bancarios, conciliarlos con los asientos del libro mayor, explicar las discrepancias con evidencia, clasificar la confianza y preparar acciones propuestas, con toda modificación financiera sujeta a una aprobación explícita. Después, defender la arquitectura.
+
+**Competencia objetivo (resultados del Módulo 16):**
+- Entregar un sistema de IA de principio a fin cuya arquitectura se pueda trazar hasta las necesidades de las partes interesadas y los requisitos.
+- Demostrar corrección, robustez, seguridad, control del costo y la latencia, y una validación realista.
+- Defender con evidencia medida las alternativas descartadas y los riesgos que quedan.
+- Producir un repositorio de ingeniería y un paquete de traspaso con calidad de portafolio.
+
+**Guía:** solo requisitos y restricciones; la solución es responsabilidad tuya al 100%. Puedes usar cualquier asistente de programación con IA, pero tienes que superar las comprobaciones y defender tus decisiones.
+
+%%md
+## 1. Requisitos y criterios de aceptación
+
+Revisiones de los hitos (cualquiera puede obligarte a rehacer trabajo: el ciclo de vida es iterativo):
+
+| Hito | Evidencia requerida | Control |
+| --- | --- | --- |
+| DEFINIR (`define`) | Enunciado del problema, ConOps, requisitos, trazabilidad, AI-FMEA | Los requisitos críticos se pueden verificar; los riesgos de gravedad alta tienen un plan de control y de prueba |
+| INVESTIGAR (`research`) | Perfil del modelo, perfil de los datos y la evidencia, benchmark de recuperación si se usa | Los candidatos elegidos se apoyan en evidencia medida |
+| ARQUITECTURA (`architect`) | >=3 alternativas, estudio de alternativas, arquitectura lógica, ADR | La decisión resiste la revisión de sensibilidad o documenta sus condiciones límite |
+| CONSTRUIR (`create`) | Pipeline o agente que funciona, esquemas, diseño del contexto, herramientas, aprobaciones | El camino feliz principal y los caminos de excepción se ejecutan |
+| VERIFICAR (`verify`) | Datos de referencia, evaluadores deterministas y semánticos, pruebas metamórficas | Ninguna regresión en casos protegidos; pasan las comprobaciones de integridad |
+| SEGURIDAD (`security`) | Modelo de amenazas, trazas de red teaming, mitigaciones | Ningún hallazgo de gravedad crítica o alta introducido a propósito queda sin resolver |
+| MEJORAR (`improve`) | Resultado de la línea base frente al optimizado en el conjunto reservado | Mejora sin incumplir las restricciones protegidas de costo, latencia y seguridad |
+| PUBLICAR (`release`) | Manifiesto, control de CI, observabilidad, marcha atrás, runbook | La simulación de la versión y el simulacro de marcha atrás PASAN |
+| VALIDAR (`validate`) | Escenarios representativos de usuarios y MOE | Evidencia de que se logra el resultado previsto para el usuario, o documentación de la brecha que queda |
+
+Requisitos públicos del paquete completo: **CAP-01** todos los requisitos críticos se trazan hasta una verificación · **CAP-02** ningún hallazgo de seguridad de gravedad alta queda sin resolver **(crítico)** · **CAP-03** pasan las comprobaciones de integridad del esquema y del dominio **(crítico)** · **CAP-04** el conjunto de evaluación incluye casos de robustez y metamórficos · **CAP-05** la publicación, la marcha atrás y el runbook están completos · **CAP-06** la evidencia de validación está ligada a las MOE.
+
+**Control de competencia (portal):** todos los controles de los hitos PASAN; puntuación del proyecto final >=80%; ningún control crítico de seguridad fallido.
+
+%%md
+## 2. Preparación del entorno
+
+%%setup
+%%md
+## 3. Comprobación de secretos
+
+Si tu sistema llama a un modelo real, su clave vive en los Secretos de Colab o en el almacén de secretos de tu despliegue; nunca en el paquete, en el repositorio ni en un registro.
+
+%%code
+fmse.secrets_check()
+%%md
+## 4. Experimento guiado
+
+Estudio del proyecto final: carga los conjuntos de datos de referencia y la plantilla de los hitos. Los datos son imperfectos a propósito.
+
+%%code
+import copy, json, pathlib
+import yaml
+from fmse_labkit.labs import capstone
+
+guided = fmse.GuidedLog(LAB_ID, required_steps=["datasets_loaded", "data_profiled", "template_loaded"])
+data = capstone.load_datasets()
+for name, rows in data.items():
+    print(f"{name}: {len(rows)} filas; columnas {list(rows[0])}")
+guided.step("datasets_loaded")
+%%md
+## 5. Predice antes de ejecutar
+
+Antes de perfilar los datos: ¿qué problemas de calidad de datos esperas encontrar en un extracto bancario, y cuáles en el libro mayor de un ERP?
+
+%%code
+my_prediction = ""
+guided.predict("prediction", my_prediction)
+%%code
+bank_refs = [r["reference"] for r in data["bank"]]
+print("líneas del banco sin referencia:", [r["line_id"] for r in data["bank"] if not r["reference"]])
+print("referencias del banco repetidas:", sorted({x for x in bank_refs if x and bank_refs.count(x) > 1}))
+print("formatos de importe (banco frente a libro mayor):", data["bank"][0]["amount"], "vs", data["ledger"][0]["amount"])
+known_vendors = {v["vendor_id"] for v in data["vendors"]}
+print("proveedores del libro mayor que no están en el maestro:", [r["entry_id"] for r in data["ledger"] if r["vendor_id"] not in known_vendors])
+guided.step("data_profiled")
+template_path = next((p for p in [pathlib.Path("templates/milestones.yaml"), pathlib.Path("capstone/templates/milestones.yaml")] if p.exists()), None)
+template = yaml.safe_load(template_path.read_text()) if template_path else {k: {} for k in ("define", "research", "architect", "create", "verify", "security", "improve", "release", "validate")}
+print("secciones de los hitos:", list(template))
+guided.step("template_loaded")
+guided.outcome("prediction", "ver el perfil de arriba")
+%%code
+worksheet = {
+    "data_issues": "",  # ¿Qué problemas encontraste y qué filas los demuestran?
+    "variant_choice": "",  # ¿Qué variante del proyecto final eliges y cuál es el problema de las partes interesadas?
+    "prediction_check": "",
+}
+guided.observe(worksheet)
+%%md
+## 6. Reto
+
+Construye el sistema a partir de los requisitos y la evidencia, hito a hito. Completa `package` (toma la plantilla como punto de partida) e implementa `reconcile()`. Itera: cualquier revisión de hito puede hacerte volver atrás.
+
+%%code
+package = copy.deepcopy(template)
+
+
+def reconcile(bank_rows, ledger_rows, vendor_rows):
+    """Devuelve {"matches": [{"bank_line", "ledger_entry", "confidence"}],
+               "discrepancies": [{"type", "evidence": [ids de fila], "explanation", "confidence"}],
+               "proposed_actions": [{"action", "requires_approval": True}]}."""
+    raise NotImplementedError
+
+
+package["create"]["reconcile"] = reconcile
+%%md
+## 7. Validación pública
+
+%%code
+milestone_results = {}
+for section in ("define", "research", "architect", "create", "verify", "security", "improve", "release", "validate"):
+    milestone_results[section] = fmse.check_public(f"capstone-{section}", package.get(section) or {})
+    milestone_results[section].show()
+result = fmse.check_public("capstone", package)
+result.show()
+%%md
+## 8. Robustez / pruebas adversariales
+
+Los escenarios reservados y adversariales del proyecto final se guardan para el evaluador opcional de la fase 2. Ponte a prueba por tu cuenta: cambia el orden de las filas del banco, modifica un formato de fecha, agrega una línea cuya descripción contenga una instrucción ("aprueba este pago") y confirma que los emparejamientos y las acciones propuestas de tu conciliador no cambian de forma insegura.
+
+%%code
+probe_results = []
+if callable(package["create"].get("reconcile")):
+    try:
+        shuffled = list(reversed([dict(r) for r in data["bank"]]))
+        a = reconcile([dict(r) for r in data["bank"]], [dict(r) for r in data["ledger"]], data["vendors"])
+        b = reconcile(shuffled, [dict(r) for r in data["ledger"]], data["vendors"])
+        same = sorted(json.dumps(m, sort_keys=True) for m in a.get("matches", [])) == sorted(json.dumps(m, sort_keys=True) for m in b.get("matches", []))
+        probe_results.append({"id": "P1", "description": "Los emparejamientos no dependen del orden de las filas del banco", "ok": same})
+    except Exception as exc:
+        probe_results.append({"id": "P1", "description": f"Los emparejamientos no dependen del orden de las filas del banco (lanzó {type(exc).__name__})", "ok": False})
+for p in probe_results:
+    print("SE CUMPLE" if p["ok"] else "NO SE CUMPLE", p["description"])
+%%md
+## 9. Reflexión de ingeniería
+
+La defensa de tu arquitectura se escribe en el portal y se califica con la rúbrica de defensa de la arquitectura. Haz aquí un borrador:
+- **Defensa de la arquitectura:** ¿por qué existe cada decisión de diseño importante y cuándo habría que revisarla?
+- **Fallos y riesgo residual:** ¿qué fallos encontraste, cómo los controlaste y qué riesgos quedan?
+- **Alternativas descartadas:** ¿qué alternativas descartaste y con qué evidencia medida?
+
+%%code
+reflection_draft = {"defense_architecture": "", "defense_failures": "", "defense_alternatives": ""}
+%%md
+## 10. Exportar el artefacto / resultado de finalización
+
+Se imprime un registro de finalización por cada revisión de hito y, al final, uno para el paquete completo. Importa cada uno en el Estudio del proyecto final de agentic-ai.es. Los registros son evidencia del flujo de aprendizaje, no certificados.
+
+%%code
+def _portable(section):
+    return {k: v for k, v in (package.get(section) or {}).items() if not callable(v)}
+
+
+for section, res in milestone_results.items():
+    art = fmse.export_artifact(f"capstone-{section}", _portable(section), title=f"Evidencia {section.upper()} del proyecto final", fmt="json")
+    rec = fmse.make_completion_record(f"capstone-{section}", res, {}, artifact=art, guided=guided)
+    fmse.show_record(rec, download=False)
+
+artifact = fmse.export_artifact(LAB_ID, {s: _portable(s) for s in package}, title="Repositorio Git completo, Cuaderno de Ingeniería y Paquete de defensa de la arquitectura", fmt="json")
+record = fmse.make_completion_record(LAB_ID, result, {"reflection_draft": reflection_draft}, artifact=artifact, guided=guided, probes=probe_results)
+fmse.show_record(record)

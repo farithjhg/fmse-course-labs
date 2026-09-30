@@ -1,0 +1,158 @@
+#! lab_id: lab-02 output: labs/lab-02-conops-builder.es.ipynb
+%%md
+# FMSE Laboratorio 02 - Constructor de ConOps
+
+**Curso:** FMSE 2026 · **Módulo 2:** Formulación del problema y concepto de operaciones · **Fase:** Definir · **Nivel:** Profesional
+
+Página del curso y progreso: [agentic-ai.es/academy/fmse/learn/m02-problem-conops](https://agentic-ai.es/academy/fmse/learn/m02-problem-conops).
+
+> **Sobre el idioma.** Las claves de los datos se quedan en inglés (son lo que leen los validadores), y el escenario de ejemplo del laboratorio guiado también está en inglés. Los valores puedes escribirlos en español o en inglés: un escenario con `type` "excepción" o "degradado" se reconoce igual que uno con "exception" o "degraded".
+
+%%md
+## 0. Misión y competencia objetivo
+
+**Misión.** Dejar de convertir en un prompt una solicitud que ya trae la solución decidida. Antes de elegir ningún modelo ni ninguna arquitectura, transformarla en un problema acotado, un mapa de partes interesadas, escenarios operativos (nominal, de excepción y degradado), medidas de efectividad y objetivos que quedan fuera, dichos de forma explícita.
+
+**Competencia objetivo (resultados del Módulo 2):**
+- Convertir una solicitud de negocio ambigua en el enunciado de un problema de ingeniería acotado.
+- Crear un concepto de operaciones (ConOps) ligero, con actores, escenarios, entorno y caminos de excepción.
+- Distinguir entre las necesidades de las partes interesadas, los resultados que buscan, las restricciones y las soluciones que proponen.
+- Definir medidas de efectividad que más adelante se puedan validar en un uso realista.
+
+**Guía:** nivel profesional, con alrededor de un 50% guiado y un 50% por tu cuenta. Es un **reto de diseño**: no hay un único ConOps correcto. Aquí se comprueba la estructura; la defensa del diseño la escribes en el portal.
+
+%%md
+## 1. Requisitos y criterios de aceptación
+
+| ID | Requisito |
+| --- | --- |
+| CON-01 | El enunciado del problema no prescribe ninguna solución |
+| CON-02 | Hay al menos 3 grupos de partes interesadas |
+| CON-03 | Incluye un escenario nominal, uno de excepción y uno degradado |
+| CON-04 | Hay al menos 3 MOE medibles |
+| CON-05 | Los objetivos que quedan fuera están indicados de forma explícita |
+
+**Control de competencia (portal):** el artefacto PASA; la defensa del diseño explica por qué hace falta un agente, o por qué no. También necesitas el cuestionario >= 80% y el laboratorio guiado.
+
+**Estructura del ConOps que leen los validadores** (un dict, YAML o Markdown con estas secciones):
+`problem_statement`, `system_boundary`, `stakeholders` (cada una con un `group`), `assumptions`, `scenarios` (cada uno con `type` = nominal / excepción / degradado y un `observable_outcome`), `moes` (cada una con `metric`, `target` y `validation_condition`), `non_goals`.
+
+%%md
+## 2. Preparación del entorno
+
+%%setup
+%%md
+## 3. Comprobación de secretos
+
+Este laboratorio no usa ninguna clave de proveedor: el ConOps se escribe antes de elegir ningún modelo.
+
+%%code
+fmse.secrets_check()
+%%md
+## 4. Experimento guiado
+
+Trabajas con un escenario de otro dominio (clasificar las incidencias de un servicio de soporte de TI) y un ConOps a medio completar. Vas a rellenar sus celdas estructuradas hasta que pase la validación.
+
+%%code
+import copy, json
+from fmse_labkit.labs import lab02
+
+guided = fmse.GuidedLog(LAB_ID, required_steps=["validate_starter", "complete_guided_conops", "guided_conops_passes"])
+print("ESCENARIO:", lab02.GUIDED_SCENARIO, "\n")
+guided_conops = copy.deepcopy(lab02.GUIDED_CONOPS_STARTER)
+print(json.dumps(guided_conops, indent=2))
+%%md
+## 5. Predice antes de ejecutar
+
+¿Cuáles de los requisitos CON-01 a CON-05 va a incumplir el ConOps de partida? Escribe tu predicción y después ejecuta los validadores sobre él.
+
+%%code
+my_prediction = ""
+guided.predict("starter_failures", my_prediction)
+%%code
+starter_result = fmse.check_public(LAB_ID, guided_conops)
+starter_result.show()
+guided.step("validate_starter")
+guided.outcome("starter_failures", starter_result.failed_requirements)
+%%md
+Ahora completa el ConOps guiado en la celda de abajo: un enunciado del problema que no prescriba ninguna solución, un tercer grupo de partes interesadas, los tipos de escenario que faltan, dos MOE medibles más y al menos un objetivo que quede fuera. Vuelve a ejecutar la celda hasta que pase.
+
+%%code
+guided_problem_statement = ""
+extra_stakeholders = []  # agrega al menos un grupo más, p. ej. {"group": ..., "interest": ...}
+extra_scenarios = []  # agrega un escenario de excepción y uno degradado (type, title, observable_outcome)
+extra_moes = []  # agrega dos MOE más (metric, target, validation_condition)
+guided_non_goals = []
+
+guided_conops["problem_statement"] = guided_problem_statement
+guided_conops["stakeholders"] = lab02.GUIDED_CONOPS_STARTER["stakeholders"] + extra_stakeholders
+guided_conops["scenarios"] = lab02.GUIDED_CONOPS_STARTER["scenarios"] + extra_scenarios
+guided_conops["moes"] = lab02.GUIDED_CONOPS_STARTER["moes"] + extra_moes
+guided_conops["non_goals"] = guided_non_goals
+guided.step("complete_guided_conops")
+
+guided_result = fmse.check_public(LAB_ID, guided_conops)
+guided_result.show()
+if guided_result.passed:
+    guided.step("guided_conops_passes")
+%%code
+worksheet = {
+    "solution_bias": "",  # ¿En qué punto la solicitud original daba la solución por decidida?
+    "degraded_vs_exception": "",  # ¿En qué se diferencia tu escenario degradado de tu escenario de excepción?
+    "prediction_check": "",
+}
+guided.observe(worksheet)
+%%md
+## 6. Reto
+
+> Un director financiero dice: *"Quiero un agente de IA que concilie los extractos bancarios con el Excel y nos diga qué está mal."*
+
+Escribe el **enunciado del problema, el límite del sistema, las partes interesadas, los supuestos, los escenarios operativos, las MOE y los objetivos que quedan fuera**. No elijas modelo, proveedor ni arquitectura. La defensa del diseño, en el portal, tiene que responder a esta pregunta: *¿este problema necesita un agente, o no?*
+
+%%code
+my_conops = {
+    "problem_statement": "",
+    "system_boundary": {"in_scope": [], "out_of_scope": []},
+    "stakeholders": [],
+    "assumptions": [],
+    "scenarios": [],
+    "moes": [],
+    "non_goals": [],
+}
+%%md
+## 7. Validación pública
+
+%%code
+result = fmse.check_public(LAB_ID, my_conops)
+result.show()
+%%md
+## 8. Robustez / pruebas adversariales
+
+Cada prueba degrada tu ConOps (cuela una solución en el enunciado del problema, elimina el escenario degradado, deja las MOE sin objetivo numérico) y confirma que los validadores lo detectan.
+
+%%code
+probe_results = fmse.probe(LAB_ID, my_conops)
+%%md
+## 9. Reflexión de ingeniería
+
+Se califica en el portal. Si te sirve, haz aquí un borrador:
+- **Defensa del diseño:** ¿este problema necesita un agente, o no? Apóyate en tus escenarios y en tus MOE como evidencia.
+- **Decisión:** ¿dónde trazaste el límite del sistema y por qué justo ahí?
+- **Riesgos pendientes:** ¿qué supuestos, si resultaran falsos, dejarían sin validez este ConOps?
+
+%%code
+reflection_draft = {"agent_defense": "", "decision": "", "remaining_risks": ""}
+%%md
+## 10. Exportar el artefacto / resultado de finalización
+
+%%code
+artifact = fmse.export_artifact(LAB_ID, my_conops, title="ConOps y definición del problema", fmt="yaml")
+record = fmse.make_completion_record(
+    LAB_ID,
+    result,
+    {"reflection_draft": reflection_draft},
+    artifact=artifact,
+    guided=guided,
+    probes=probe_results,
+)
+fmse.show_record(record)

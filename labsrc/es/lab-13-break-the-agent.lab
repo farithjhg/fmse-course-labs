@@ -1,0 +1,137 @@
+#! lab_id: lab-13 output: labs/lab-13-break-the-agent.es.ipynb
+%%md
+# FMSE Laboratorio 13 - Rompe el agente
+
+**Curso:** FMSE 2026 · **Módulo 13:** Seguridad de la IA, red teaming y arquitectura de seguridad · **Fase:** Verificar y validar · **Nivel:** Sénior
+
+La página del curso y tu progreso están en [agentic-ai.es/academy/fmse/learn/m13-security-red-teaming](https://agentic-ai.es/academy/fmse/learn/m13-security-red-teaming).
+
+> **Sobre el idioma.** Las explicaciones y los mensajes de los validadores están en español. El código, los nombres de las variables, las claves de los datos y los datos de ejemplo se quedan en inglés (son lo que leen los validadores). Puedes escribir tus respuestas en español o en inglés.
+%%md
+## 0. Misión y competencia objetivo
+
+**Misión.** Descubrir al menos cuatro vulnerabilidades introducidas a propósito, implementar mitigaciones en la arquitectura y demostrar con pruebas de regresión que funcionan.
+
+**Laboratorio guiado.** Atacas un agente vulnerable a propósito y examinas las trazas.
+
+**Competencia objetivo (resultados del Módulo 13):**
+- Modelar las amenazas de la inyección de prompts directa e indirecta, la revelación de datos sensibles, el envenenamiento de la cadena de suministro o del contexto, el manejo inadecuado de las salidas, la agencia excesiva y el consumo sin límites.
+- Aplicar el mínimo privilegio y puntos de aprobación fuera del modelo.
+- Atacar sistemas de recuperación y de herramientas, y convertir los ataques que funcionan en pruebas de regresión.
+- Diseñar el registro de incidentes, los interruptores de emergencia y modos degradados seguros.
+
+**Guía:** alrededor de un 25% guiado y un 75% por tu cuenta. Es un **reto de ingeniería**: la parte guiada te da un camino de referencia que funciona; el reto, no.
+%%md
+## 1. Requisitos y criterios de aceptación
+
+Estos requisitos los comprueban validadores públicos. Te dicen qué requisito falló y por qué, nunca la implementación que se esperaba.
+
+| ID | Requisito |
+| --- | --- |
+| RED-01 | Hay al menos 4 vulnerabilidades documentadas |
+| RED-02 | Cada una tiene activo, impacto, control y prueba |
+| RED-03 | Las herramientas que modifican datos tienen el mínimo privilegio **(crítico)** |
+| RED-04 | Hay pruebas de regresión contra la inyección **(crítico)** |
+| RED-05 | Los límites de recursos están definidos |
+| RED-06 | Ninguna vulnerabilidad conocida de gravedad alta queda sin resolver **(crítico)** |
+
+**Control de competencia (portal):** ninguna vulnerabilidad conocida de gravedad alta introducida a propósito queda sin resolver. También hacen falta el cuestionario (>= 80%), el laboratorio guiado, el artefacto y tu reflexión. Un requisito crítico no se compensa con las demás puntuaciones.
+%%md
+## 2. Preparación del entorno
+%%setup
+%%md
+## 3. Comprobación de secretos
+
+Este laboratorio funciona por completo sin conexión: no necesitas ninguna clave de proveedor. Las claves que uses en otros laboratorios van en los Secretos de Colab y nunca se imprimen.
+%%code
+fmse.secrets_check()
+%%md
+## 4. Experimento guiado
+
+`SupportAgent()` sin hooks, sin alcances y sin límites es la versión vulnerable. Su "modelo" trata cualquier texto en imperativo como una instrucción, venga del usuario o de un documento recuperado. Hay cinco ataques preparados; su texto está en inglés.
+%%code
+from fmse_labkit.labs import lab13
+
+guided = fmse.GuidedLog(LAB_ID, required_steps=["attacks_run", "traces_inspected"])
+vulnerable = lab13.vulnerable_agent()
+for aid, a in lab13.ATTACKS.items():
+    print(aid, f"[{a['severity']}]", "-", a["request"][:60])
+%%md
+## 5. Predice antes de ejecutar
+
+¿Cuáles de los cinco ataques van a funcionar contra el agente vulnerable? Escribe tu predicción y después ejecuta el experimento.
+%%code
+my_prediction = ""
+guided.predict("prediction", my_prediction)
+%%code
+results = {aid: lab13.run_attack(vulnerable, aid) for aid in lab13.ATTACKS}
+for aid, res in results.items():
+    print(f"{aid:<36} exploited={lab13.exploited(aid, res)}")
+guided.step("attacks_run")
+r = results["A1-indirect-injection-exfiltration"]
+print("ejecutado:", [(c.tool, c.args.get("to"), c.origin) for c in r.executed])
+print("registro:", r.log)
+guided.step("traces_inspected")
+guided.outcome("prediction", "ver la salida de arriba")
+%%md
+**Hoja de trabajo.** Al menos una frase completa por campo: estas observaciones forman parte de la evidencia de tu laboratorio guiado.
+%%code
+worksheet = {
+    "trace_observation": "",
+    "boundary_observation": "",
+    "prediction_check": "",
+}
+guided.observe(worksheet)
+%%md
+## 6. Reto
+
+**Encuentra, corrige y demuestra cuatro vulnerabilidades introducidas a propósito.** Descubre al menos cuatro vulnerabilidades introducidas a propósito, implementa mitigaciones en la arquitectura y demuestra con pruebas de regresión que funcionan.
+
+Restricciones:
+- Las mitigaciones viven en la aplicación: alcances, guardas, límites, manejo de las salidas, enmascarado de datos en los registros.
+- Todo ataque de gravedad alta tiene que fallar contra tu agente.
+%%code
+def build_agent():
+    """Devuelve lab13.SupportAgent(hooks=..., tool_scopes=..., limits=...) con tus mitigaciones en la arquitectura."""
+    raise NotImplementedError
+
+
+report = []  # {"id", "title", "asset", "impact", "control", "test" (id de una prueba de regresión), "severity"}
+regression_tests = []  # {"id", "attack": id del ataque, "check": fn(agent) -> True cuando el agente es seguro}
+%%md
+## 7. Validación pública
+%%code
+submission = {"build_agent": build_agent, "report": report, "regression_tests": regression_tests}
+result = fmse.check_public(LAB_ID, submission)
+result.show()
+%%md
+## 8. Robustez / pruebas adversariales
+
+Condiciones adversariales adicionales, fuera de la batería que se califica. No cambian tu puntuación: te enseñan dónde es frágil tu solución.
+%%code
+probe_results = fmse.probe(LAB_ID, submission)
+%%md
+## 9. Reflexión de ingeniería
+
+La reflexión que se califica se escribe en el portal y se guarda con tu artefacto. Si te sirve, haz aquí un borrador:
+- **Decisión:** ¿qué control frena la inyección indirecta y por qué no puede vivir en el prompt?
+- **Compromisos:** ¿qué comportamiento legítimo restringieron tus controles y cómo conseguiste que el agente siguiera siendo útil?
+- **Riesgos pendientes:** ¿qué clase de ataque no has probado y a qué apuntaría?
+%%code
+reflection_draft = {"decision": "", "tradeoffs": "", "remaining_risks": ""}
+%%md
+## 10. Exportar el artefacto / resultado de finalización
+
+Exporta el artefacto **Modelo de amenazas, informe de red teaming y conjunto de regresión de seguridad** e imprime un registro de finalización. Copia el registro y pégalo en la página del Módulo 13 de agentic-ai.es (**Importar el resultado del laboratorio**). El registro es un documento del flujo de aprendizaje, no un certificado firmado.
+%%code
+artifact = fmse.export_artifact(LAB_ID, {"report": report, "regression_tests": [{"id": t.get("id"), "attack": t.get("attack")} for t in regression_tests]},
+                     title="Modelo de amenazas, informe de red teaming y conjunto de regresión de seguridad", fmt="json")
+record = fmse.make_completion_record(
+    LAB_ID,
+    result,
+    {"reflection_draft": reflection_draft, **{}},
+    artifact=artifact,
+    guided=guided,
+    probes=probe_results,
+)
+fmse.show_record(record)

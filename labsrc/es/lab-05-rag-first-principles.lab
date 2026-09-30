@@ -1,0 +1,144 @@
+#! lab_id: lab-05 output: labs/lab-05-rag-first-principles.es.ipynb
+%%md
+# FMSE Laboratorio 05 - RAG desde los principios básicos
+
+**Curso:** FMSE 2026 · **Módulo 5:** Búsqueda, fundamentación, RAG y arquitectura de la información · **Fase:** Investigar · **Nivel:** Ingeniería
+
+La página del curso y tu progreso están en [agentic-ai.es/academy/fmse/learn/m05-rag-grounding](https://agentic-ai.es/academy/fmse/learn/m05-rag-grounding).
+
+> **Sobre el idioma.** El código, las claves de los datos y el corpus de políticas de ejemplo se quedan en inglés; los mensajes de los validadores están en español. Cuando tu `answer()` no tenga evidencia, puede responder "no lo sé" o "I do not know": los validadores reconocen las dos formas.
+%%md
+## 0. Misión y competencia objetivo
+
+**Misión.** Mejorar un pipeline de RAG débil a propósito hasta alcanzar el recall de recuperación y el umbral de respuestas fundamentadas que se piden, sin pasarte del presupuesto de contexto.
+
+**Laboratorio guiado.** Construyes un recuperador pequeño sobre un corpus seleccionado y después le añades reordenación y procedencia.
+
+**Competencia objetivo (resultados del Módulo 5):**
+- Diseñar un pipeline de recuperación con fragmentación, metadatos, filtrado, ordenación y reordenación, y procedencia.
+- Distinguir la calidad de la recuperación de la calidad de la generación.
+- Evaluar la fundamentación con métricas de recuperación y con comprobaciones de la evidencia que respalda cada respuesta.
+- Manejar la actualidad de los datos, el control de acceso, las fuentes que se contradicen y el comportamiento de "no lo sé".
+
+**Guía:** alrededor de un 25% guiado y un 75% por tu cuenta. Es un **reto de ingeniería**: el experimento guiado (secciones 4 y 5) te da un camino de referencia que funciona; el reto (sección 6), no.
+%%md
+## 1. Requisitos y criterios de aceptación
+
+Estos requisitos los comprueban validadores públicos. Te dicen *qué requisito* falló y por qué, nunca la implementación que se esperaba.
+
+| ID | Requisito |
+| --- | --- |
+| RAG-01 | Existe un benchmark de recuperación |
+| RAG-02 | Los IDs de las fuentes se conservan de principio a fin |
+| RAG-03 | Se excluyen los documentos no autorizados **(crítico)** |
+| RAG-04 | Se supera la prueba de evidencia contradictoria |
+| RAG-05 | Se respeta el presupuesto de contexto |
+| RAG-06 | Se alcanza el umbral de respuestas fundamentadas en el conjunto público reservado |
+
+**Control de competencia (portal):** las pruebas públicas PASAN; se alcanza el umbral de respuestas fundamentadas en el conjunto público reservado. También hay que aprobar el cuestionario (>= 80%) y completar el laboratorio guiado, el artefacto y la reflexión. Un requisito crítico no se compensa con otras puntuaciones.
+%%md
+## 2. Preparación del entorno
+%%setup
+%%md
+## 3. Comprobación de secretos
+
+Este laboratorio funciona por completo sin conexión: no necesita ninguna clave de proveedor. Si usas claves en otros laboratorios, guárdalas en los Secretos de Colab; nunca se imprimen.
+%%code
+fmse.secrets_check()
+%%md
+## 4. Experimento guiado
+
+Trabajas con un corpus seleccionado de políticas internas: cada documento tiene su lista de control de acceso y su versión, y hay dos políticas de viajes que se contradicen. `lab05.weak_retrieve` y `lab05.weak_answer` son la línea base, débil a propósito: devuelven documentos enteros, sin control de acceso y sin presupuesto. El corpus y las preguntas de ejemplo están en inglés.
+%%code
+from fmse_labkit.labs import lab05
+from fmse_labkit.model import approx_tokens
+
+guided = fmse.GuidedLog(LAB_ID, required_steps=["baseline_measured", "bm25_built", "provenance_added"])
+for d in lab05.CORPUS:
+    print(d["doc_id"], d["acl"], d["version"], "-", d["title"])
+%%md
+## 5. Predice antes de ejecutar
+
+¿Qué va a fallar en la línea base débil cuando un empleado pregunte por las bandas salariales? ¿Y con la pregunta sobre los gastos de viaje? Escribe tu predicción y después ejecuta el experimento.
+%%code
+my_prediction = ""
+guided.predict("prediction", my_prediction)
+%%code
+toy_bench = [{"query": h["query"], "user": h["user"], "expected_docs": h["expected_docs"]} for h in lab05.HELD_OUT[:6]]
+print("recall@3 de la línea base débil:", lab05.recall_at_k(lab05.weak_retrieve, toy_bench))
+w = lab05.weak_answer("What is the salary band for engineer level 3?", "employee")
+print("tokens de contexto de la línea base débil:", approx_tokens(w["context"]), "| documentos recuperados:", w["retrieved"])
+guided.step("baseline_measured")
+chunks = [c for d in lab05.CORPUS for c in lab05.chunk(d, "sentence")]
+index = lab05.BM25Index(chunks)
+print(index.search("per diem domestic travel", k=3))
+guided.step("bm25_built")
+print("Cada fragmento conserva doc_id, version, la fecha de vigencia y acl:", chunks[0])
+guided.step("provenance_added")
+guided.outcome("prediction", "ver la salida de arriba")
+%%md
+**Hoja de trabajo.** Anota lo que observaste, al menos una frase completa por campo: estas observaciones forman parte de la evidencia de tu laboratorio guiado.
+%%code
+worksheet = {
+    "baseline_failures": "",  # ¿Qué falló en la línea base débil, en concreto?
+    "reranking_effect": "",  # ¿Qué cambió al fragmentar, indexar con BM25 y conservar la procedencia?
+    "prediction_check": "",  # ¿Acertaste en tu predicción? ¿Qué se te escapó?
+}
+guided.observe(worksheet)
+%%md
+## 6. Reto
+
+**Arregla un pipeline de RAG débil.** Mejora un pipeline de RAG débil a propósito hasta alcanzar el recall de recuperación y el umbral de respuestas fundamentadas que se piden, sin pasarte del presupuesto de contexto.
+
+Restricciones:
+- Presupuesto de contexto: 400 tokens por respuesta.
+- Objetivos en el conjunto público reservado (held-out): recall@3 >= 0,80 y respuestas fundamentadas >= 0,80.
+%%code
+def retrieve(query, user, k=3):
+    """Devuelve hasta k fragmentos (dicts con doc_id, ...) que este usuario tiene permiso para ver, ordenados del mejor al peor."""
+    raise NotImplementedError
+
+
+def answer(query, user):
+    """Devuelve {"answer", "citations", "conflict", "context", "retrieved"} sin pasarse de lab05.CONTEXT_BUDGET_TOKENS."""
+    raise NotImplementedError
+
+
+my_benchmark = []  # 10 o más entradas {"query", "user", "expected_docs"}
+%%md
+## 7. Validación pública
+%%code
+submission = {"retrieve": retrieve, "answer": answer, "benchmark": my_benchmark}
+result = fmse.check_public(LAB_ID, submission)
+result.show()
+%%md
+## 8. Robustez / pruebas adversariales
+
+Condiciones adversariales que van más allá de la batería que se califica. No cambian tu puntuación: te muestran dónde es frágil tu solución.
+%%code
+probe_results = fmse.probe(LAB_ID, submission)
+%%md
+## 9. Reflexión de ingeniería
+
+La reflexión que se califica se escribe en el portal y se guarda con tu artefacto. Si te sirve, haz aquí un borrador:
+- **Decisión:** ¿qué cambio movió más el recall o la fundamentación, y en qué capa actuó?
+- **Compromisos:** ¿qué te obligó a dejar fuera el presupuesto de contexto y cómo decidiste qué sacrificar?
+- **Riesgos pendientes:** ¿dónde podría tu pipeline seguir respondiendo con confianza a partir de evidencia equivocada o desactualizada?
+%%code
+reflection_draft = {"decision": "", "tradeoffs": "", "remaining_risks": ""}
+%%md
+## 10. Exportar el artefacto / resultado de finalización
+
+Exporta el artefacto **Arquitectura de la información y benchmark de recuperación** e imprime un registro de finalización. Pega el registro en la página del Módulo 5 de agentic-ai.es (**Importar el resultado del laboratorio**). El registro es un documento del flujo de aprendizaje, no un certificado firmado.
+%%code
+artifact = fmse.export_artifact(LAB_ID, {"design": "Describe aquí la fragmentación, los metadatos, el control de acceso y la política ante conflictos.", "benchmark": my_benchmark,
+                            "held_out": {k: result.evidence.get(k) for k in ("recall_at_3", "grounded_rate")}}, title="Arquitectura de la información y benchmark de recuperación", fmt="json")
+record = fmse.make_completion_record(
+    LAB_ID,
+    result,
+    {"reflection_draft": reflection_draft, **{}},
+    artifact=artifact,
+    guided=guided,
+    probes=probe_results,
+)
+fmse.show_record(record)

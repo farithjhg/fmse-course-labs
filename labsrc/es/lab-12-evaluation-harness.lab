@@ -1,0 +1,144 @@
+#! lab_id: lab-12 output: labs/lab-12-evaluation-harness.es.ipynb
+%%md
+# FMSE Laboratorio 12 - Banco de evaluación
+
+**Curso:** FMSE 2026 · **Módulo 12:** Ingeniería de evaluación y verificación/validación · **Fase:** Verificar y validar · **Nivel:** Sénior
+
+Este notebook es el entorno del laboratorio. La página del curso, tu progreso y tu Cuaderno de Ingeniería están en
+[agentic-ai.es/academy/fmse/learn/m12-evaluation-vv](https://agentic-ai.es/academy/fmse/learn/m12-evaluation-vv).
+Avanza de arriba abajo: cada sección tiene un propósito.
+
+> **Sobre el idioma.** Las explicaciones y los mensajes de los validadores están en español. El código, los nombres de las variables, las claves de los datos y los correos de ejemplo se quedan en inglés (son lo que leen los validadores). Puedes escribir tus respuestas en español o en inglés.
+%%md
+## 0. Misión y competencia objetivo
+
+**Misión.** Crear un conjunto de evaluación que detecte al menos el 90% de los fallos introducidos a propósito en las categorías de corrección, robustez, esquema y resistencia a la inyección.
+
+**Laboratorio guiado.** Construyes evaluadores sobre un sistema de extracción de reclamaciones que se te da hecho y, después, le agregas transformaciones metamórficas.
+
+**Competencia objetivo (resultados del Módulo 12):**
+- Diseñar conjuntos de referencia (golden) a partir de los requisitos y de modos de fallo reales.
+- Construir evaluadores deterministas, semánticos, calificados por un modelo y a medida, y usarlos de forma calibrada.
+- Usar pruebas metamórficas para descubrir la fragilidad del sistema sin necesitar una única salida exacta.
+- Distinguir la verificación (el sistema cumple los requisitos especificados) de la validación (cumple lo que esperan las partes interesadas en un uso realista).
+
+**Guía:** alrededor de un 25% guiado y un 75% por tu cuenta. Es un **reto de ingeniería**: la parte guiada te da un camino de referencia que funciona; el reto, no.
+%%md
+## 1. Requisitos y criterios de aceptación
+
+Los validadores públicos comprueban estos requisitos. Te dicen qué requisito falló y por qué, nunca la implementación que se esperaba.
+
+| ID | Requisito |
+| --- | --- |
+| EVL-01 | El conjunto de referencia está categorizado |
+| EVL-02 | Hay al menos 3 tipos de evaluador |
+| EVL-03 | Hay transformaciones metamórficas implementadas |
+| EVL-04 | Existe trazabilidad de la verificación |
+| EVL-05 | Hay un escenario de validación definido |
+| EVL-06 | Se alcanza el objetivo de detección de fallos **(crítico)** |
+
+**Control de competencia (portal):** se alcanza el objetivo de detección de fallos y no hay ninguna regresión de gravedad alta. También hacen falta el cuestionario (>= 80%), el laboratorio guiado, el artefacto y tu reflexión. Un requisito crítico no se compensa con otras puntuaciones.
+%%md
+## 2. Preparación del entorno
+%%setup
+%%md
+## 3. Comprobación de secretos
+
+Este laboratorio funciona por completo sin conexión: no necesita ninguna clave de proveedor. Las claves que uses en otros laboratorios van en los Secretos de Colab y nunca se imprimen.
+%%code
+fmse.secrets_check()
+%%md
+## 4. Experimento guiado
+
+Un sistema de extracción de reclamaciones que funciona bien (`reference_system`) y su contrato. Construye evaluadores contra él y, después, comprueba que unas transformaciones sencillas no cambian la salida correcta. Los correos de ejemplo están en inglés.
+%%code
+from fmse_labkit.labs import lab12
+
+guided = fmse.GuidedLog(LAB_ID, required_steps=["scorers_built", "metamorphic_checked"])
+for email in lab12.SAMPLE_EMAILS:
+    print(repr(email[:60]), "->", lab12.reference_system(email))
+print("Requisitos:", lab12.CLAIM_REQUIREMENTS)
+%%md
+## 5. Predice antes de ejecutar
+
+¿Estarán de acuerdo un evaluador de coincidencia exacta y un evaluador de esquema ante una salida cuyo importe es la cadena '1250.50'? Escribe tu predicción y después ejecuta el experimento.
+%%code
+# Sustituye la cadena vacía por tu predicción y ejecuta esta celda.
+my_prediction = ""
+guided.predict("prediction", my_prediction)
+%%code
+out = lab12.reference_system(lab12.SAMPLE_EMAILS[0])
+stringy = [{**c, "amount": f"{c['amount']:.2f}"} for c in out]
+print("coincidencia exacta:", stringy == out, "| errores de esquema:", fmse.schema.validate(stringy[0], lab12.CLAIM_SCHEMA))
+guided.step("scorers_built")
+reordered = "\n".join(reversed(lab12.SAMPLE_EMAILS[0].splitlines()))
+print("invariante al reordenar las líneas:", lab12.reference_system(reordered) == out)
+guided.step("metamorphic_checked")
+guided.outcome("prediction", "ver la salida de arriba")
+%%md
+**Hoja de trabajo.** Escribe al menos una frase completa por campo: estas observaciones forman parte de la evidencia de tu laboratorio guiado.
+%%code
+worksheet = {
+    "scorer_disagreement": "",  # ¿En qué discreparon los dos evaluadores y cuál tenía razón?
+    "metamorphic_value": "",  # ¿Qué te dice la prueba de reordenación que no te decía la coincidencia exacta?
+    "prediction_check": "",  # ¿Acertaste en tu predicción? ¿Qué se te escapó?
+}
+guided.observe(worksheet)
+%%md
+## 6. Reto
+
+**Un conjunto de evaluación que detecta fallos.** Crea un conjunto de evaluación que detecte al menos el 90% de los fallos introducidos a propósito en las categorías de corrección, robustez, esquema y resistencia a la inyección.
+
+Restricciones:
+- Ninguna falsa alarma sobre el sistema correcto.
+- Detección de fallos >= 90% de los mutantes introducidos (crítico).
+%%code
+golden_set = []  # {"id", "input", "expected", "category" (lab12.CATEGORIES), "severity"}
+scorers = []  # {"name", "type" (lab12.SCORER_TYPES), "fn": fn(expected, actual) -> bool}
+transforms = []  # {"name", "fn": fn(text) -> text}  (no debe cambiar la extracción correcta)
+traceability = {}  # id del requisito -> [ids del conjunto de referencia]
+validation_scenarios = []  # {"moe", "scenario", "users", "measure"}
+
+
+def run_suite(system):
+    """Ejecuta tu batería contra un system(text) -> reclamaciones. Devuelve {"passed": bool, "failures": [...]}."""
+    raise NotImplementedError
+%%md
+## 7. Validación pública
+
+Ejecuta los validadores públicos. Los comentarios nombran el requisito y el motivo; las pistas son conceptuales. Revisa y vuelve a ejecutar tantas veces como necesites.
+%%code
+submission = {"golden_set": golden_set, "scorers": scorers, "transforms": transforms, "traceability": traceability, "validation_scenarios": validation_scenarios, "run_suite": run_suite}
+result = fmse.check_public(LAB_ID, submission)
+result.show()
+%%md
+## 8. Robustez / pruebas adversariales
+
+Condiciones adversariales adicionales, fuera de la batería que se califica. No cambian tu puntuación: te enseñan dónde es frágil tu solución.
+%%code
+probe_results = fmse.probe(LAB_ID, submission)
+%%md
+## 9. Reflexión de ingeniería
+
+La reflexión que se califica se escribe en el portal y se guarda con tu artefacto. Si te sirve, haz aquí un borrador:
+- **Decisión:** ¿qué parte de tu conjunto detectó más mutantes, y por qué precisamente esa?
+- **Compromisos:** ¿cuánto cuesta ejecutar tu conjunto y qué comprobaciones quitarías si tuvieras un presupuesto de tiempo?
+- **Riesgos pendientes:** ¿qué tipo de fallo seguiría escapándosele a tu conjunto?
+%%code
+reflection_draft = {"decision": "", "tradeoffs": "", "remaining_risks": ""}
+%%md
+## 10. Exportar el artefacto / resultado de finalización
+
+Exporta el artefacto **Plan de evaluación, conjunto de referencia y banco de pruebas** e imprime un registro de finalización. Copia el registro y pégalo en la página del Módulo 12 en agentic-ai.es (**Importar el resultado del laboratorio**). El registro es un documento del flujo de aprendizaje, no un certificado firmado.
+%%code
+artifact = fmse.export_artifact(LAB_ID, {"golden_set": golden_set, "scorers": [s.get("name") for s in scorers], "transforms": [t.get("name") for t in transforms],
+                            "traceability": traceability, "validation_scenarios": validation_scenarios}, title="Plan de evaluación, conjunto de referencia y banco de pruebas", fmt="json")
+record = fmse.make_completion_record(
+    LAB_ID,
+    result,
+    {"reflection_draft": reflection_draft, **{}},
+    artifact=artifact,
+    guided=guided,
+    probes=probe_results,
+)
+fmse.show_record(record)

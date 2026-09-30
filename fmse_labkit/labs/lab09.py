@@ -14,9 +14,11 @@ Public validator requirements (course spec, Module 09):
 from __future__ import annotations
 
 import copy
+import re
 from typing import Any, Dict, List
 
 from ..core import Checker, call_learner, check_public, register
+from ..i18n import add_catalog, t as _t
 from ..model import approx_tokens
 
 LAB = "lab-09"
@@ -97,12 +99,12 @@ def validate(submission: Any, c: Checker) -> None:
     trace = build_trace()
     raw_tokens = approx_tokens(trace_text(trace))
     fn = submission.get("compact")
-    res, err = call_learner(fn, copy.deepcopy(trace), BUDGET_TOKENS) if callable(fn) else (None, "no 'compact' function")
+    res, err = call_learner(fn, copy.deepcopy(trace), BUDGET_TOKENS) if callable(fn) else (None, _t("no 'compact' function"))
     res = res if isinstance(res, dict) else {}
     stable, dynamic = str(res.get("stable") or ""), str(res.get("dynamic") or "")
     full = stable + "\n" + dynamic
     lost = [f for f, s in FACTS.items() if f not in full or s.lower() not in full.lower()]
-    c.record("CTX-01", not err and not lost, f"{err or 'Facts lost in compaction'}: {', '.join(lost) if not err else ''}.", f"All {len(FACTS)} verification facts preserved.")
+    c.record("CTX-01", not err and not lost, (f"{err}." if err else _t('Facts lost in compaction: {v}.', v=', '.join(lost))), _t('All {n_FACTS} verification facts preserved.', n_FACTS=len(FACTS)))
 
     stale_ids = [e["text"].split("(")[-1].rstrip(")") for e in trace if e.get("superseded")]
     chat_ids = [e["text"].split("(")[-1].rstrip(")") for e in trace if e["kind"] == "chatter"]
@@ -110,18 +112,18 @@ def validate(submission: Any, c: Checker) -> None:
     kept_chat = [s for s in chat_ids if s in full]
     latest_kept = "SNAPSHOT-43" in full
     c.record("CTX-02", not err and not kept_stale and not kept_chat and latest_kept,
-             f"Kept {len(kept_stale)} superseded snapshot(s) and {len(kept_chat)} chatter line(s)" + ("" if latest_kept else "; the latest metrics snapshot was dropped") + ".",
-             "Only the latest snapshot survives; chatter removed.")
+             _t('Kept {n_kept_stale} superseded snapshot(s) and {n_kept_chat} chatter line(s)', n_kept_stale=len(kept_stale), n_kept_chat=len(kept_chat)) + ("" if latest_kept else _t('; the latest metrics snapshot was dropped')) + ".",
+             _t('Only the latest snapshot survives; chatter removed.'))
 
     separated = SYSTEM in stable and TOOLS in stable and SYSTEM not in dynamic and TOOLS not in dynamic and not any(f in stable for f in FACTS)
-    c.record("CTX-03", not err and separated, "The stable prefix must hold the system instructions and tool definitions verbatim, and nothing that changes during the incident.",
-             "Stable prefix and dynamic context are separated.")
+    c.record("CTX-03", not err and separated, _t('The stable prefix must hold the system instructions and tool definitions verbatim, and nothing that changes during the incident.'),
+             _t('Stable prefix and dynamic context are separated.'))
 
     tokens = approx_tokens(full)
     reduction = 1 - tokens / raw_tokens
     c.record("CTX-04", not err and tokens <= BUDGET_TOKENS and reduction >= MIN_REDUCTION,
-             f"Compacted context is {tokens} tokens ({reduction:.0%} smaller than {raw_tokens}); needs <= {BUDGET_TOKENS} and >= {MIN_REDUCTION:.0%} reduction.",
-             f"{tokens} tokens, {reduction:.0%} reduction.")
+             _t('Compacted context is {tokens} tokens ({reduction:.0%} smaller than {raw_tokens}); needs <= {BUDGET_TOKENS} and >= {MIN_REDUCTION:.0%} reduction.', tokens=tokens, reduction=reduction, raw_tokens=raw_tokens, BUDGET_TOKENS=BUDGET_TOKENS, MIN_REDUCTION=MIN_REDUCTION),
+             _t('{tokens} tokens, {reduction:.0%} reduction.', tokens=tokens, reduction=reduction))
     c.evidence.update({"raw_tokens": raw_tokens, "compacted_tokens": tokens, "reduction": round(reduction, 3)})
 
     policy = submission.get("memory_policy") or {}
@@ -130,10 +132,10 @@ def validate(submission: Any, c: Checker) -> None:
         entry = policy.get(mt) if isinstance(policy, dict) else None
         if not isinstance(entry, dict) or not all(str(entry.get(k, "")).strip() for k in ("owner", "retention", "deletion")):
             problems.append(mt)
-    secret_ok = isinstance(policy, dict) and any("secret" in str(v).lower() for v in policy.values())
+    secret_ok = isinstance(policy, dict) and any(re.search(r"secret|credencial", str(v).lower()) for v in policy.values())
     if not secret_ok:
-        problems.append("no rule excluding secrets from memory")
-    c.record("CTX-05", not problems, f"Memory policy incomplete (owner, retention, deletion) for: {', '.join(problems)}.", "Ownership, retention and deletion documented for every state type.")
+        problems.append(_t('no rule excluding secrets from memory'))
+    c.record("CTX-05", not problems, _t('Memory policy incomplete (owner, retention, deletion) for: {v}.', v=', '.join(problems)), _t('Ownership, retention and deletion documented for every state type.'))
 
 
 def naive_context(trace: List[Dict[str, Any]]) -> str:
@@ -148,13 +150,39 @@ def probes(submission: Any) -> List[Dict[str, Any]]:
     out = []
     trace = build_trace() + [{"id": "E999", "kind": "decision", "text": "DEC-04: open a postmortem ticket PM-311"}]
     res, _ = call_learner(fn, trace, BUDGET_TOKENS)
-    out.append({"id": "P1", "description": "A decision added late in the thread survives compaction", "ok": isinstance(res, dict) and "PM-311" in str(res.get("dynamic", "")) + str(res.get("stable", ""))})
+    out.append({"id": "P1", "description": _t('A decision added late in the thread survives compaction'), "ok": isinstance(res, dict) and "PM-311" in str(res.get("dynamic", "")) + str(res.get("stable", ""))})
     trace2 = build_trace() + [{"id": "E998", "kind": "chatter", "text": "my api key is " + "sk-" + "fmse-canary-deadbeefdeadbeefdead" + ", can someone check?"}]
     res, _ = call_learner(fn, trace2, BUDGET_TOKENS)
-    out.append({"id": "P2", "description": "A credential pasted into chat never reaches the compacted context", "ok": isinstance(res, dict) and "deadbeefdeadbeef" not in str(res)})
+    out.append({"id": "P2", "description": _t('A credential pasted into chat never reaches the compacted context'), "ok": isinstance(res, dict) and "deadbeefdeadbeef" not in str(res)})
     res, _ = call_learner(fn, build_trace(), 200)
-    out.append({"id": "P3", "description": "A tighter budget (200) is respected or the compactor says it cannot fit", "ok": isinstance(res, dict) and (approx_tokens(str(res.get("stable", "")) + str(res.get("dynamic", ""))) <= 200 or bool(res.get("over_budget")))})
+    out.append({"id": "P3", "description": _t('A tighter budget (200) is respected or the compactor says it cannot fit'), "ok": isinstance(res, dict) and (approx_tokens(str(res.get("stable", "")) + str(res.get("dynamic", ""))) <= 200 or bool(res.get("over_budget")))})
     return out
 
 
 register(LAB, REQUIREMENTS, validate, probes)
+
+
+add_catalog({
+    "no 'compact' function": "no hay función 'compact'",
+    "Facts lost in compaction: {v}.": "Hechos perdidos en la compactación: {v}.",
+    "All {n_FACTS} verification facts preserved.": "Se conservan los {n_FACTS} hechos de verificación.",
+    "Only the latest snapshot survives; chatter removed.": "Solo sobrevive la instantánea más reciente; el ruido de la conversación se elimina.",
+    "The stable prefix must hold the system instructions and tool definitions verbatim, and nothing that changes during the incident.":
+        "El prefijo estable debe contener, palabra por palabra, las instrucciones de sistema y las definiciones de herramientas, y nada que cambie durante el incidente.",
+    "Stable prefix and dynamic context are separated.": "El prefijo estable y el contexto dinámico están separados.",
+    "Compacted context is {tokens} tokens ({reduction:.0%} smaller than {raw_tokens}); needs <= {BUDGET_TOKENS} and >= {MIN_REDUCTION:.0%} reduction.":
+        "El contexto compactado tiene {tokens} tokens ({reduction:.0%} menos que {raw_tokens}); debe quedar en <= {BUDGET_TOKENS} con una reducción >= {MIN_REDUCTION:.0%}.",
+    "{tokens} tokens, {reduction:.0%} reduction.": "{tokens} tokens, {reduction:.0%} de reducción.",
+    "Memory policy incomplete (owner, retention, deletion) for: {v}.":
+        "Política de memoria incompleta (responsable, retención, borrado) en: {v}.",
+    "Ownership, retention and deletion documented for every state type.":
+        "Responsable, retención y borrado documentados para cada tipo de estado.",
+    "no rule excluding secrets from memory": "no hay ninguna regla que excluya los secretos de la memoria",
+    "A decision added late in the thread survives compaction": "Una decisión añadida al final del hilo sobrevive a la compactación",
+    "A credential pasted into chat never reaches the compacted context": "Una credencial pegada en el chat nunca llega al contexto compactado",
+    "A tighter budget (200) is respected or the compactor says it cannot fit":
+        "Un presupuesto más ajustado (200) se respeta, o el compactador avisa de que no cabe",
+    "Kept {n_kept_stale} superseded snapshot(s) and {n_kept_chat} chatter line(s)":
+        "Se conservaron {n_kept_stale} instantánea(s) obsoleta(s) y {n_kept_chat} línea(s) de ruido de conversación",
+    "; the latest metrics snapshot was dropped": "; se descartó la instantánea de métricas más reciente",
+})

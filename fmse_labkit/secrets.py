@@ -12,6 +12,8 @@ import os
 import re
 from typing import Dict, Iterable, List, Optional
 
+from .i18n import add_catalog, t
+
 # Names the labs look for. Only presence is ever reported.
 KNOWN_SECRET_NAMES = ("GEMINI_API_KEY", "GOOGLE_API_KEY", "OPENAI_API_KEY", "ANTHROPIC_API_KEY")
 
@@ -52,10 +54,10 @@ def secrets_check(names: Iterable[str] = KNOWN_SECRET_NAMES) -> Dict[str, bool]:
     """Report which secrets are available — presence only, never values."""
     status = {n: bool(get_secret(n)) for n in names}
     for n, present in status.items():
-        print(f"  {n:<20} {'available' if present else 'not set'}")
+        print(f"  {n:<20} {t('available') if present else t('not set')}")
     if not any(status.values()):
-        print("  No provider key found. Every lab runs fully offline with the built-in simulator;")
-        print("  a key is only needed for the optional real-provider experiments.")
+        print(t("  No provider key found. Every lab runs fully offline with the built-in simulator;"))
+        print(t("  a key is only needed for the optional real-provider experiments."))
     return status
 
 
@@ -83,3 +85,11 @@ def contains_secret(text: str, extra_values: Iterable[str] = ()) -> List[str]:
         if pattern.search(s):
             found.append(pattern.pattern[:24])
     return found
+
+
+add_catalog({
+    "available": "disponible",
+    "not set": "sin configurar",
+    "  No provider key found. Every lab runs fully offline with the built-in simulator;": "  No hay ninguna clave de proveedor. Todos los laboratorios funcionan por completo sin conexión, con el simulador incorporado;",
+    "  a key is only needed for the optional real-provider experiments.": "  la clave solo hace falta para los experimentos opcionales con un proveedor real.",
+})

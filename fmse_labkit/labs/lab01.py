@@ -21,6 +21,7 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional
 
 from ..core import Checker, call_learner, capture_output, register
+from ..i18n import add_catalog, t as _t
 from ..schema import validate as schema_validate
 from ..secrets import contains_secret
 
@@ -171,7 +172,7 @@ def _status(result: Any) -> Optional[str]:
 def validate(submission: Any, c: Checker) -> None:
     if not isinstance(submission, dict) or not callable(submission.get("call_and_validate")):
         for rid in ("API-01", "API-02", "API-03", "API-04", "API-05", "SEC-01"):
-            c.fail(rid, "Submit a dict with your call_and_validate function under the key 'call_and_validate'.")
+            c.fail(rid, _t("Submit a dict with your call_and_validate function under the key 'call_and_validate'."))
         fn = None
     else:
         fn = submission["call_and_validate"]
@@ -185,67 +186,67 @@ def validate(submission: Any, c: Checker) -> None:
 
         ep, res, err = runs["valid"]
         ok = err is None and _status(res) == "ok" and isinstance(getattr(res, "data", None), dict) and res.data.get("total") == 120.0
-        c.record("API-01", ok, f"A valid response did not come back as status 'ok' with the parsed data ({err or 'status ' + repr(_status(res))}).",
-                 "Valid response returns status 'ok' with parsed data.")
+        c.record("API-01", ok, _t("A valid response did not come back as status 'ok' with the parsed data ({v}).", v=err or _t('status {v}', v=repr(_status(res)))),
+                 _t("Valid response returns status 'ok' with parsed data."))
 
         ep, res, err = runs["malformed_json"]
         c.record("API-02", err is None and _status(res) == "invalid_json",
-                 f"Truncated JSON did not return status 'invalid_json' ({err or 'status ' + repr(_status(res))}).",
-                 "Truncated JSON returns a typed 'invalid_json' result without raising.")
+                 _t("Truncated JSON did not return status 'invalid_json' ({v}).", v=err or _t('status {v}', v=repr(_status(res)))),
+                 _t("Truncated JSON returns a typed 'invalid_json' result without raising."))
 
         ep, res, err = runs["schema_mismatch"]
         c.record("API-03", err is None and _status(res) == "schema_error" and bool(getattr(res, "errors", None)),
-                 f"A schema-violating response did not return status 'schema_error' with error details ({err or 'status ' + repr(_status(res))}).",
-                 "Schema violations return 'schema_error' with details.")
+                 _t("A schema-violating response did not return status 'schema_error' with error details ({v}).", v=err or _t('status {v}', v=repr(_status(res)))),
+                 _t("Schema violations return 'schema_error' with details."))
 
         ep, res, err = runs["business_rule"]
         c.record("API-05", err is None and _status(res) == "business_rule_error",
-                 f"A schema-valid response whose total does not match its line items was not rejected as 'business_rule_error' ({err or 'status ' + repr(_status(res))}).",
-                 "Business-rule violations return 'business_rule_error'.")
+                 _t("A schema-valid response whose total does not match its line items was not rejected as 'business_rule_error' ({v}).", v=err or _t('status {v}', v=repr(_status(res)))),
+                 _t("Business-rule violations return 'business_rule_error'."))
 
         problems = []
         ep, res, err = runs["always_503"]
         if err or ep.calls > 3:
-            problems.append(f"a permanently failing endpoint was called {ep.calls} times with max_retries=2")
+            problems.append(_t('a permanently failing endpoint was called {calls} times with max_retries=2', calls=ep.calls))
         elif _status(res) != "transport_error":
-            problems.append(f"a permanently failing endpoint returned status {_status(res)!r} instead of 'transport_error'")
+            problems.append(_t("a permanently failing endpoint returned status {res} instead of 'transport_error'", res=repr(_status(res))))
         elif getattr(res, "attempts", None) != ep.calls:
-            problems.append("CallResult.attempts does not match the number of calls made")
+            problems.append(_t('CallResult.attempts does not match the number of calls made'))
         ep, res, err = runs["timeout"]
         if err or ep.calls > 3 or _status(res) != "timeout":
-            problems.append(f"a timing-out endpoint gave {err or 'status ' + repr(_status(res))} after {ep.calls} call(s)")
+            problems.append(_t('a timing-out endpoint gave {v} after {calls} call(s)', v=err or _t('status {v}', v=repr(_status(res))), calls=ep.calls))
         ep, res, err = runs["transient_then_valid"]
         if err or _status(res) != "ok":
-            problems.append("a single transient 503 was not recovered by a retry")
-        c.record("API-04", not problems, "; ".join(problems) + ".", "Retries recover transient failures and stop at the bound.")
+            problems.append(_t('a single transient 503 was not recovered by a retry'))
+        c.record("API-04", not problems, "; ".join(problems) + ".", _t('Retries recover transient failures and stop at the bound.'))
         c.evidence["calls_on_permanent_failure"] = runs["always_503"][0].calls
 
         leaks = []
         if all(res is None for _, res, _ in runs.values()):
-            c.fail("SEC-01", "Cannot verify credential handling: the function did not return a result in any scenario.")
+            c.fail("SEC-01", _t('Cannot verify credential handling: the function did not return a result in any scenario.'))
         if CANARY_KEY in printed:
-            leaks.append("printed output")
+            leaks.append(_t('printed output'))
         for scenario, (_, res, err) in runs.items():
             if CANARY_KEY in repr(res) or CANARY_KEY in str(err or ""):
-                leaks.append(f"the {scenario} result")
-        c.record("SEC-01", not leaks, f"The credential value appeared in {', '.join(sorted(set(leaks)))}.",
-                 "The credential never appears in output, results, or errors.")
+                leaks.append(_t('the {scenario} result', scenario=scenario))
+        c.record("SEC-01", not leaks, _t('The credential value appeared in {v}.', v=', '.join(sorted(set(leaks)))),
+                 _t('The credential never appears in output, results, or errors.'))
 
     manifest = submission.get("manifest") if isinstance(submission, dict) else None
     if not isinstance(manifest, dict):
-        c.fail("MAN-01", "No experiment manifest found under the key 'manifest'.")
+        c.fail("MAN-01", _t("No experiment manifest found under the key 'manifest'."))
     else:
         missing = [k for k in ("model", "prompt_version", "dataset_version", "metrics") if not manifest.get(k)]
         metrics = manifest.get("metrics")
         numeric = isinstance(metrics, dict) and any(isinstance(v, (int, float)) and not isinstance(v, bool) for v in metrics.values())
         if missing:
-            c.fail("MAN-01", f"The manifest is missing: {', '.join(missing)}.")
+            c.fail("MAN-01", _t('The manifest is missing: {v}.', v=', '.join(missing)))
         elif not numeric:
-            c.fail("MAN-01", "The manifest's metrics contain no measured numeric values.")
+            c.fail("MAN-01", _t("The manifest's metrics contain no measured numeric values."))
         elif contains_secret(json.dumps(manifest, default=str), [CANARY_KEY]):
-            c.fail("MAN-01", "The manifest contains credential-shaped text; manifests are shared, keys are not.")
+            c.fail("MAN-01", _t('The manifest contains credential-shaped text; manifests are shared, keys are not.'))
         else:
-            c.record("MAN-01", True, "", "Manifest records model, prompt version, dataset version and metrics.")
+            c.record("MAN-01", True, "", _t('Manifest records model, prompt version, dataset version and metrics.'))
 
 
 def run_experiment(fn: Callable, trials_per_scenario: int = 1) -> Dict[str, Any]:
@@ -278,12 +279,55 @@ def probes(submission: Any) -> List[Dict[str, Any]]:
     cases = []
     with capture_output():
         ep, res, err = _run(fn, "always_503", max_retries=0)
-        cases.append({"id": "P1", "description": "max_retries=0 makes exactly one call", "ok": err is None and ep.calls == 1})
+        cases.append({"id": "P1", "description": _t('max_retries=0 makes exactly one call'), "ok": err is None and ep.calls == 1})
         ep, res, err = _run(fn, "always_503", max_retries=5)
-        cases.append({"id": "P2", "description": "max_retries=5 makes at most 6 calls", "ok": err is None and ep.calls <= 6})
+        cases.append({"id": "P2", "description": _t('max_retries=5 makes at most 6 calls'), "ok": err is None and ep.calls <= 6})
         ep, res, err = _run(fn, "auth_echo")
-        cases.append({"id": "P3", "description": "401 is not retried (retrying cannot fix a credential)", "ok": err is None and ep.calls == 1})
+        cases.append({"id": "P3", "description": _t('401 is not retried (retrying cannot fix a credential)'), "ok": err is None and ep.calls == 1})
     return cases
 
 
 register(LAB, REQUIREMENTS, validate, probes)
+
+
+add_catalog({
+    "Submit a dict with your call_and_validate function under the key 'call_and_validate'.":
+        "Entrega un dict con tu función call_and_validate bajo la clave 'call_and_validate'.",
+    "status {v}": "estado {v}",
+    "A valid response did not come back as status 'ok' with the parsed data ({v}).":
+        "Una respuesta válida no devolvió el estado 'ok' con los datos ya parseados ({v}).",
+    "Valid response returns status 'ok' with parsed data.": "Una respuesta válida devuelve el estado 'ok' con los datos parseados.",
+    "Truncated JSON did not return status 'invalid_json' ({v}).": "Un JSON truncado no devolvió el estado 'invalid_json' ({v}).",
+    "Truncated JSON returns a typed 'invalid_json' result without raising.":
+        "Un JSON truncado devuelve un resultado tipado 'invalid_json' sin lanzar una excepción.",
+    "A schema-violating response did not return status 'schema_error' with error details ({v}).":
+        "Una respuesta que viola el esquema no devolvió el estado 'schema_error' con el detalle de los errores ({v}).",
+    "Schema violations return 'schema_error' with details.": "Las violaciones del esquema devuelven 'schema_error' con los detalles.",
+    "A schema-valid response whose total does not match its line items was not rejected as 'business_rule_error' ({v}).":
+        "Una respuesta válida según el esquema, pero cuyo total no cuadra con sus líneas, no se rechazó como 'business_rule_error' ({v}).",
+    "Business-rule violations return 'business_rule_error'.": "Las violaciones de reglas de negocio devuelven 'business_rule_error'.",
+    "a permanently failing endpoint was called {calls} times with max_retries=2":
+        "se llamó {calls} veces a un endpoint que falla siempre, con max_retries=2",
+    "a permanently failing endpoint returned status {res} instead of 'transport_error'":
+        "un endpoint que falla siempre devolvió el estado {res} en lugar de 'transport_error'",
+    "CallResult.attempts does not match the number of calls made": "CallResult.attempts no coincide con el número de llamadas que se hicieron",
+    "a timing-out endpoint gave {v} after {calls} call(s)": "un endpoint que agota el tiempo de espera devolvió {v} tras {calls} llamada(s)",
+    "a single transient 503 was not recovered by a retry": "un solo 503 transitorio no se recuperó con un reintento",
+    "Retries recover transient failures and stop at the bound.": "Los reintentos recuperan los fallos transitorios y se detienen en el límite.",
+    "Cannot verify credential handling: the function did not return a result in any scenario.":
+        "No se puede verificar el manejo de la credencial: la función no devolvió resultado en ningún escenario.",
+    "printed output": "la salida impresa",
+    "the {scenario} result": "el resultado del escenario {scenario}",
+    "The credential value appeared in {v}.": "El valor de la credencial apareció en {v}.",
+    "The credential never appears in output, results, or errors.": "La credencial no aparece nunca en la salida, en los resultados ni en los errores.",
+    "No experiment manifest found under the key 'manifest'.": "No se encontró ningún manifiesto de experimento bajo la clave 'manifest'.",
+    "The manifest is missing: {v}.": "Al manifiesto le falta: {v}.",
+    "The manifest's metrics contain no measured numeric values.": "Las métricas del manifiesto no contienen ningún valor numérico medido.",
+    "The manifest contains credential-shaped text; manifests are shared, keys are not.":
+        "El manifiesto contiene texto que parece una credencial; los manifiestos se comparten, las claves no.",
+    "Manifest records model, prompt version, dataset version and metrics.":
+        "El manifiesto registra el modelo, la versión del prompt, la versión del conjunto de datos y las métricas.",
+    "max_retries=0 makes exactly one call": "max_retries=0 hace exactamente una llamada",
+    "max_retries=5 makes at most 6 calls": "max_retries=5 hace como máximo 6 llamadas",
+    "401 is not retried (retrying cannot fix a credential)": "Un 401 no se reintenta (reintentar no arregla una credencial)",
+})

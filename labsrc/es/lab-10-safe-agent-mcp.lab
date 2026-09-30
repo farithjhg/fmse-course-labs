@@ -1,0 +1,144 @@
+#! lab_id: lab-10 output: labs/lab-10-safe-agent-mcp.es.ipynb
+%%md
+# FMSE Laboratorio 10 - Agente seguro que usa herramientas
+
+**Curso:** FMSE 2026 · **Módulo 10:** Sistemas de agentes y Model Context Protocol · **Fase:** Construir · **Nivel:** Sénior
+
+Este notebook es el entorno del laboratorio. La página del curso, tu progreso y tu Cuaderno de Ingeniería están en
+[agentic-ai.es/academy/fmse/learn/m10-agents-mcp](https://agentic-ai.es/academy/fmse/learn/m10-agents-mcp).
+Avanza de arriba abajo: cada sección tiene un propósito.
+
+> **Sobre el idioma.** Las explicaciones y los mensajes de los validadores están en español. El código, las claves de los datos y los escenarios de ejemplo se quedan en inglés (son lo que leen los validadores). La descripción de tu diseño de estado puede ir en español: por ejemplo, "sin estado" o "identificador de estado explícito".
+%%md
+## 0. Misión y competencia objetivo
+
+**Misión.** Construir un agente de triaje SRE basado en MCP que pueda consultar las métricas y el historial del repositorio, pero que tenga que pedir aprobación antes de cualquier modificación de remediación.
+
+**Laboratorio guiado.** Conectas un agente ya preparado a herramientas de solo lectura y, después, le agregas una herramienta de escritura protegida.
+
+**Competencia objetivo (resultados del Módulo 10):**
+- Diseñar un bucle de agente con condiciones de parada explícitas, presupuestos, alcance de las herramientas y recuperación ante fallos.
+- Distinguir un flujo de trabajo de un agente, y justificar la autonomía a partir de los requisitos.
+- Construir un cliente y un servidor MCP con los conceptos vigentes de la versión 2026-07-28.
+- Aplicar autorización basada en capacidades y aprobación humana a las herramientas que modifican datos.
+
+**Guía:** alrededor de un 25% guiado y un 75% por tu cuenta. Es un **reto de ingeniería**: la parte guiada te da un camino de referencia que funciona; el reto, no.
+%%md
+## 1. Requisitos y criterios de aceptación
+
+Los validadores públicos comprueban estos requisitos. Te dicen qué requisito falló y por qué, nunca la implementación que se esperaba.
+
+| ID | Requisito |
+| --- | --- |
+| AGT-01 | Se respeta el presupuesto del bucle |
+| AGT-02 | Las capacidades de lectura y de escritura están separadas |
+| AGT-03 | Toda modificación requiere aprobación **(crítico)** |
+| AGT-04 | Se gestionan los errores de las herramientas |
+| AGT-05 | Hay una referencia explícita al estado o está documentado un diseño sin estado |
+
+**Control de competencia (portal):** el agente completa los escenarios sin ninguna modificación no autorizada; las comprobaciones de seguridad PASAN. También hacen falta el cuestionario (>= 80%), el laboratorio guiado, el artefacto y tu reflexión. Un requisito crítico no se compensa con otras puntuaciones.
+%%md
+## 2. Preparación del entorno
+%%setup
+%%md
+## 3. Comprobación de secretos
+
+Este laboratorio funciona por completo sin conexión: no necesita ninguna clave de proveedor. Las claves que uses en otros laboratorios van en los Secretos de Colab y nunca se imprimen.
+%%code
+fmse.secrets_check()
+%%md
+## 4. Experimento guiado
+
+`SimMcpServer` simula los conceptos básicos del núcleo sin estado de MCP: peticiones autodescriptivas que se enrutan por las cabeceras `Mcp-Method`/`Mcp-Name`, y una lista de herramientas determinista y cacheable. `ScriptedPlanner` hace el papel del modelo. `read_only_agent` ejecuta lo que el planificador proponga, sea lo que sea.
+%%code
+from fmse_labkit.labs import lab10
+from fmse_labkit.labs.lab10 import McpRequest
+
+guided = fmse.GuidedLog(LAB_ID, required_steps=["tools_listed", "read_only_run", "write_risk_observed"])
+server = lab10.SimMcpServer("normal")
+listing = server.handle(McpRequest("tools/list"))
+print(McpRequest("tools/list").headers, "etag:", listing["etag"])
+for t in listing["result"]["tools"]:
+    print(" ", t["name"], "-", t["description"])
+guided.step("tools_listed")
+%%md
+## 5. Predice antes de ejecutar
+
+¿Qué hará el agente de solo lectura en el escenario 'unapproved', en el que el planificador propone restart_service? Escribe tu predicción y después ejecuta el experimento.
+%%code
+# Sustituye la cadena vacía por tu predicción y ejecuta esta celda.
+my_prediction = ""
+guided.predict("prediction", my_prediction)
+%%code
+print(lab10.read_only_agent(lab10.ScriptedPlanner("tool_error"), lab10.SimMcpServer("tool_error")))
+guided.step("read_only_run")
+srv = lab10.SimMcpServer("unapproved")
+print(lab10.read_only_agent(lab10.ScriptedPlanner("unapproved"), srv), "modificaciones ejecutadas:", srv.mutations)
+guided.step("write_risk_observed")
+guided.outcome("prediction", "ver la salida de arriba")
+%%md
+**Hoja de trabajo.** Escribe al menos una frase completa por campo: estas observaciones forman parte de la evidencia de tu laboratorio guiado.
+%%code
+worksheet = {
+    "loop_observation": "",  # ¿Cómo reaccionó el bucle al error de la herramienta?
+    "write_observation": "",  # ¿Qué pasó con la escritura que nadie había aprobado?
+    "prediction_check": "",  # ¿Acertaste en tu predicción? ¿Qué se te escapó?
+}
+guided.observe(worksheet)
+%%md
+## 6. Reto
+
+**Agente de triaje SRE basado en MCP.** Construye un agente de triaje SRE basado en MCP que pueda consultar las métricas y el historial del repositorio, pero que tenga que pedir aprobación antes de cualquier modificación de remediación.
+
+Restricciones:
+- Presupuesto de pasos: 8.
+- El servidor simulado no exige la aprobación; tiene que exigirla tu aplicación.
+%%code
+tool_policy = {}  # nombre de la herramienta -> {"mutability": "read"|"write"}
+
+
+def run_agent(planner, server, approver, policy, max_steps):
+    """Bucle: action = planner.next_action(observation); aplica la política, las aprobaciones y el presupuesto.
+    Devuelve {"status": "done"|"budget_exhausted", "log": [...]}."""
+    raise NotImplementedError
+
+
+design = {"state": "", "description": ""}  # identificador de estado explícito o diseño sin estado, y dónde vive el estado de la aplicación
+%%md
+## 7. Validación pública
+
+Ejecuta los validadores públicos. Los comentarios nombran el requisito y el motivo; las pistas son conceptuales. Revisa y vuelve a ejecutar tantas veces como necesites.
+%%code
+submission = {"run_agent": run_agent, "tool_policy": tool_policy, "design": design}
+result = fmse.check_public(LAB_ID, submission)
+result.show()
+%%md
+## 8. Robustez / pruebas adversariales
+
+Condiciones adversariales adicionales, fuera de la batería que se califica. No cambian tu puntuación: te enseñan dónde es frágil tu solución.
+%%code
+probe_results = fmse.probe(LAB_ID, submission)
+%%md
+## 9. Reflexión de ingeniería
+
+La reflexión que se califica se escribe en el portal y se guarda con tu artefacto. Si te sirve, haz aquí un borrador:
+- **Decisión:** ¿dónde exige tu agente la aprobación, y por qué ahí y no en el modelo o en el servidor?
+- **Compromisos:** ¿cómo elegiste el presupuesto de pasos, y qué ejecuciones legítimas podría cortar?
+- **Riesgos pendientes:** ¿qué podría proponer un planificador que tu política no haya previsto?
+%%code
+reflection_draft = {"decision": "", "tradeoffs": "", "remaining_risks": ""}
+%%md
+## 10. Exportar el artefacto / resultado de finalización
+
+Exporta el artefacto **Arquitectura del agente, servidor y cliente MCP y política de herramientas** e imprime un registro de finalización. Copia el registro y pégalo en la página del Módulo 10 en agentic-ai.es (**Importar el resultado del laboratorio**). El registro es un documento del flujo de aprendizaje, no un certificado firmado.
+%%code
+artifact = fmse.export_artifact(LAB_ID, {"tool_policy": tool_policy, "design": design}, title="Arquitectura del agente, servidor y cliente MCP y política de herramientas", fmt="json")
+record = fmse.make_completion_record(
+    LAB_ID,
+    result,
+    {"reflection_draft": reflection_draft, **{}},
+    artifact=artifact,
+    guided=guided,
+    probes=probe_results,
+)
+fmse.show_record(record)

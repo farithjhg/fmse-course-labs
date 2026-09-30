@@ -4,11 +4,16 @@ from __future__ import annotations
 
 import json
 import re
+import unicodedata
 from typing import Any, Dict, List
+
+from .i18n import add_catalog, t
 
 
 def normalise_key(key: str) -> str:
-    return re.sub(r"[^a-z0-9]+", "_", str(key).strip().lower()).strip("_")
+    # Accents are folded first, so a Spanish heading such as "Criterios de éxito" becomes criterios_de_exito.
+    folded = unicodedata.normalize("NFKD", str(key)).encode("ascii", "ignore").decode("ascii")
+    return re.sub(r"[^a-z0-9]+", "_", folded.strip().lower()).strip("_")
 
 
 def parse_document(submission: Any) -> Dict[str, Any]:
@@ -16,7 +21,7 @@ def parse_document(submission: Any) -> Dict[str, Any]:
     if isinstance(submission, dict):
         return {normalise_key(k): v for k, v in submission.items()}
     if not isinstance(submission, str) or not submission.strip():
-        raise ValueError("submission is empty; provide a dict, YAML/JSON text, or Markdown with section headings")
+        raise ValueError(t("submission is empty; provide a dict, YAML/JSON text, or Markdown with section headings"))
     text = submission.strip()
     if text.startswith("{"):
         return parse_document(json.loads(text))
@@ -85,3 +90,59 @@ def first(doc: Dict[str, Any], *keys: str) -> Any:
 
 def has_number(text: str) -> bool:
     return bool(re.search(r"\d", text or ""))
+
+
+add_catalog({
+    "submission is empty; provide a dict, YAML/JSON text, or Markdown with section headings":
+        "la entrega está vacía; envía un dict, texto en YAML o JSON, o Markdown con encabezados de sección",
+})
+
+
+# --- Answers written in Spanish -------------------------------------------------------------------
+# Data keys stay English in every notebook, but the values learners type (scenario types, requirement
+# categories, verification methods, free text) may be Spanish. Validators compare folded text.
+
+def fold(text: Any) -> str:
+    """Lower-case text with accents removed, so 'Excepción' and 'excepcion' compare equal."""
+    return unicodedata.normalize("NFKD", str(text or "")).encode("ascii", "ignore").decode("ascii").lower()
+
+
+# English term -> Spanish equivalents (folded).
+SPANISH_TERMS: Dict[str, tuple] = {
+    "nominal": ("nominal",),
+    "exception": ("excepcion",),
+    "degraded": ("degradado", "degradada"),
+    "test": ("prueba",),
+    "analysis": ("analisis",),
+    "inspection": ("inspeccion",),
+    "demonstration": ("demostracion",),
+    "functional": ("funcional",),
+    "performance": ("rendimiento",),
+    "interface": ("interfaz",),
+    "security": ("seguridad",),
+    "cost": ("coste", "costo"),
+    "operational": ("operativo", "operativa", "operacional", "operacion"),
+}
+
+
+def mentions(text: Any, term: str) -> bool:
+    """True if the text contains the English term or one of its Spanish equivalents."""
+    folded = fold(text)
+    return term in folded or any(es in folded for es in SPANISH_TERMS.get(term, ()))
+
+
+def canonical(value: Any) -> str:
+    """A single-word answer mapped to its English term ('Rendimiento' -> 'performance'); otherwise folded."""
+    folded = fold(value).strip()
+    for en, es in SPANISH_TERMS.items():
+        if folded == en or folded in es:
+            return en
+    return folded
+
+
+_SHALL = re.compile(r"\b(shall|debera|deberan)\b")
+
+
+def has_shall(statement: Any) -> bool:
+    """A binding requirement: 'shall', or its Spanish form 'deberá'."""
+    return bool(_SHALL.search(fold(statement)))

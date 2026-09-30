@@ -1,0 +1,141 @@
+#! lab_id: lab-09 output: labs/lab-09-context-budget.es.ipynb
+%%md
+# FMSE Laboratorio 09 - Optimizador del presupuesto de contexto
+
+**Curso:** FMSE 2026 · **Módulo 9:** Ingeniería de contexto, memoria y caché · **Fase:** Construir · **Nivel:** Sénior
+
+Este notebook es el entorno del laboratorio. La página del curso, tu progreso y tu Cuaderno de Ingeniería están en
+[agentic-ai.es/academy/fmse/learn/m09-context-engineering](https://agentic-ai.es/academy/fmse/learn/m09-context-engineering).
+Avanza de arriba abajo: cada sección tiene un propósito.
+
+> **Sobre el idioma.** Las explicaciones y los mensajes de los validadores están en español. El código, los nombres de las variables, las claves de los datos y el hilo de ejemplo se quedan en inglés (son lo que leen los validadores). Puedes escribir tus respuestas en español o en inglés.
+%%md
+## 0. Misión y competencia objetivo
+
+**Misión.** Refactorizar la traza de un agente de larga duración para conservar las decisiones y el estado de las herramientas y, al mismo tiempo, reducir el contexto en >=40% sin ninguna regresión en un conjunto de verificación.
+
+**Laboratorio guiado.** Primero observas cómo se degrada el resultado cuando el contexto tiene ruido; después implementas un selector o compactador de contexto.
+
+**Competencia objetivo (resultados del Módulo 9):**
+- Diseñar el montaje del contexto como un pipeline: seleccionar, ordenar, comprimir, persistir y reutilizar.
+- Distinguir el historial de la conversación, el estado de trabajo, la memoria duradera, la evidencia recuperada y el estado de la aplicación.
+- Mantener estables los prefijos y el orden de las herramientas cuando la caché de prompts mejora de forma apreciable la latencia o el costo.
+- Medir la calidad del contexto y la eficacia de la caché, en lugar de maximizar la longitud del contexto.
+
+**Guía:** alrededor de un 25% guiado y un 75% por tu cuenta. Es un **reto de ingeniería**: la parte guiada te da un camino de referencia que funciona; el reto, no.
+%%md
+## 1. Requisitos y criterios de aceptación
+
+Los validadores públicos comprueban estos requisitos. Te dicen qué requisito falló y por qué, nunca la implementación que se esperaba.
+
+| ID | Requisito |
+| --- | --- |
+| CTX-01 | Se conservan los hechos necesarios |
+| CTX-02 | Se elimina el contexto desactualizado o irrelevante |
+| CTX-03 | El contexto estable y el dinámico están separados |
+| CTX-04 | Se respeta el presupuesto de contexto **(crítico)** |
+| CTX-05 | Está documentado quién es responsable de la memoria y del estado |
+
+**Control de competencia (portal):** regresión de calidad <= el umbral definido para el módulo; se alcanza el objetivo de reducción del contexto. También hacen falta el cuestionario (>= 80%), el laboratorio guiado, el artefacto y tu reflexión. Un requisito crítico no se compensa con otras puntuaciones.
+%%md
+## 2. Preparación del entorno
+%%setup
+%%md
+## 3. Comprobación de secretos
+
+Este laboratorio funciona por completo sin conexión: no necesita ninguna clave de proveedor. Las claves que uses en otros laboratorios van en los Secretos de Colab y nunca se imprimen.
+%%code
+fmse.secrets_check()
+%%md
+## 4. Experimento guiado
+
+Un hilo de incidente con 70 eventos: instrucciones de sistema y definiciones de herramientas, decisiones, restricciones, preguntas abiertas e identificadores del estado de las herramientas, todo enterrado entre instantáneas de métricas ya superadas y charla que no aporta nada. `FACTS` es el conjunto de verificación que tiene que sobrevivir a la compactación. El hilo de ejemplo está en inglés.
+%%code
+from fmse_labkit.labs import lab09
+from fmse_labkit.model import approx_tokens
+
+guided = fmse.GuidedLog(LAB_ID, required_steps=["full_replay_measured", "facts_located"])
+trace = lab09.build_trace()
+print(len(trace), "eventos; presupuesto:", lab09.BUDGET_TOKENS, "tokens")
+%%md
+## 5. Predice antes de ejecutar
+
+¿Cuántos tokens costará reproducir el hilo completo? ¿Qué parte de ellos son decisiones y qué parte es ruido? Escribe tu predicción y después ejecuta el experimento.
+%%code
+# Sustituye la cadena vacía por tu predicción y ejecuta esta celda.
+my_prediction = ""
+guided.predict("prediction", my_prediction)
+%%code
+full = lab09.naive_context(trace)
+print("reproducción completa:", approx_tokens(full), "tokens")
+guided.step("full_replay_measured")
+for fid, text in lab09.FACTS.items():
+    where = next(e["id"] for e in trace if fid in e["text"])
+    print(fid, "->", where, ":", text)
+guided.step("facts_located")
+guided.outcome("prediction", "ver la salida de arriba")
+%%md
+**Hoja de trabajo.** Escribe al menos una frase completa por campo: estas observaciones forman parte de la evidencia de tu laboratorio guiado.
+%%code
+worksheet = {
+    "noise_observation": "",  # ¿Qué tipo de ruido ocupaba más tokens en el hilo?
+    "selection_observation": "",  # ¿Dónde estaban enterrados los hechos necesarios y qué los distinguía?
+    "prediction_check": "",  # ¿Acertaste en tu predicción? ¿Qué se te escapó?
+}
+guided.observe(worksheet)
+%%md
+## 6. Reto
+
+**Compacta la traza de un agente de larga duración.** Refactoriza la traza de un agente de larga duración para conservar las decisiones y el estado de las herramientas y, al mismo tiempo, reducir el contexto en >=40% sin ninguna regresión en un conjunto de verificación.
+
+Restricciones:
+- Presupuesto: 450 tokens; reducción >= 40% (crítico).
+- El prefijo estable (sistema + herramientas) va separado del contexto dinámico.
+%%code
+def compact(trace, budget_tokens):
+    """Devuelve {"stable": el prefijo de sistema y herramientas, "dynamic": todo lo que cambia, "over_budget": bool}."""
+    raise NotImplementedError
+
+
+memory_policy = {
+    # una entrada por cada tipo de estado de lab09.MEMORY_TYPES: {"owner", "retention", "deletion"}, más una regla sobre los secretos
+}
+%%md
+## 7. Validación pública
+
+Ejecuta los validadores públicos. Los comentarios nombran el requisito y el motivo; las pistas son conceptuales. Revisa y vuelve a ejecutar tantas veces como necesites.
+%%code
+submission = {"compact": compact, "memory_policy": memory_policy}
+result = fmse.check_public(LAB_ID, submission)
+result.show()
+%%md
+## 8. Robustez / pruebas adversariales
+
+Condiciones adversariales adicionales, fuera de la batería que se califica. No cambian tu puntuación: te enseñan dónde es frágil tu solución.
+%%code
+probe_results = fmse.probe(LAB_ID, submission)
+%%md
+## 9. Reflexión de ingeniería
+
+La reflexión que se califica se escribe en el portal y se guarda con tu artefacto. Si te sirve, haz aquí un borrador:
+- **Decisión:** ¿qué conservó, qué descartó y qué resumió tu compactador? ¿Cómo lo decidiste?
+- **Compromisos:** ¿qué información perdiste a sabiendas para cumplir el presupuesto?
+- **Riesgos pendientes:** ¿qué tipo de hecho podría contener una traza futura que tu política descartaría?
+%%code
+reflection_draft = {"decision": "", "tradeoffs": "", "remaining_risks": ""}
+%%md
+## 10. Exportar el artefacto / resultado de finalización
+
+Exporta el artefacto **Especificación de la arquitectura de contexto y política de compactación** e imprime un registro de finalización. Copia el registro y pégalo en la página del Módulo 9 en agentic-ai.es (**Importar el resultado del laboratorio**). El registro es un documento del flujo de aprendizaje, no un certificado firmado.
+%%code
+artifact = fmse.export_artifact(LAB_ID, {"compaction": {k: result.evidence.get(k) for k in ("raw_tokens", "compacted_tokens", "reduction")}, "memory_policy": memory_policy},
+                     title="Especificación de la arquitectura de contexto y política de compactación", fmt="json")
+record = fmse.make_completion_record(
+    LAB_ID,
+    result,
+    {"reflection_draft": reflection_draft, **{}},
+    artifact=artifact,
+    guided=guided,
+    probes=probe_results,
+)
+fmse.show_record(record)

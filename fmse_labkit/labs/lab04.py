@@ -24,7 +24,9 @@ import statistics
 from typing import Any, Dict, List
 
 from ..core import Checker, check_public, register
+from ..i18n import add_catalog, t as _t
 from ..model import approx_tokens
+from ..textutil import fold
 
 LAB = "lab-04"
 
@@ -124,37 +126,37 @@ def validate(submission: Any, c: Checker) -> None:
     ids = list(bench.get("task_ids") or [])
     unknown = [i for i in ids if i not in pool]
     c.record("PRF-01", len(set(ids)) >= 20 and not unknown,
-             f"The benchmark has {len(set(ids))} distinct known tasks" + (f" and unknown ids {unknown[:5]}" if unknown else "") + "; at least 20 are required.",
-             f"{len(set(ids))} tasks.")
+             _t('The benchmark has {v} distinct known tasks', v=len(set(ids))) + (_t(' and unknown ids {v}', v=unknown[:5]) if unknown else "") + _t('; at least 20 are required.'),
+             _t('{v} tasks.', v=len(set(ids))))
 
     variants = [v for v in (submission.get("variants") or []) if isinstance(v, dict)]
     valid = [v for v in variants if v.get("name") and v.get("model") in MODELS]
     sigs = {(v.get("model"), v.get("effort"), v.get("prompt_style")) for v in valid}
-    c.record("PRF-02", len(valid) >= 2 and len(sigs) >= 2, f"Found {len(sigs)} distinct valid variant configuration(s); at least 2 are required (models: {', '.join(MODELS)}).",
-             f"{len(sigs)} variants compared.")
+    c.record("PRF-02", len(valid) >= 2 and len(sigs) >= 2, _t('Found {n_sigs} distinct valid variant configuration(s); at least 2 are required (models: {v}).', n_sigs=len(sigs), v=', '.join(MODELS)),
+             _t('{n_sigs} variants compared.', n_sigs=len(sigs)))
 
     metric = bench.get("quality_metric") or {}
     c.record("PRF-03", isinstance(metric, dict) and bool(metric.get("name")) and len(str(metric.get("definition", "")).split()) >= 8,
-             "The quality metric needs a name and a definition of at least a sentence.", "Quality metric defined.")
+             _t('The quality metric needs a name and a definition of at least a sentence.'), _t('Quality metric defined.'))
 
     results = submission.get("results") or {}
     missing = [v["name"] for v in valid if not all(isinstance((results.get(v["name"]) or {}).get(k), (int, float)) for k in ("quality", "p50_latency_ms", "mean_cost"))]
-    c.record("PRF-04", bool(valid) and not missing, f"Missing quality/latency/cost numbers for: {', '.join(missing) or 'all variants'}.", "Latency and cost captured for every variant.")
+    c.record("PRF-04", bool(valid) and not missing, _t('Missing quality/latency/cost numbers for: {v}.', v=', '.join(missing) or _t('all variants')), _t('Latency and cost captured for every variant.'))
 
     concl = submission.get("conclusion") or {}
     text = " ".join(str(concl.get(k, "")) for k in ("recommendation", "evidence"))
     problems = []
     if not re.search(r"\d", text):
-        problems.append("no measured numbers cited")
+        problems.append(_t('no measured numbers cited'))
     if sum(1 for v in valid if v["name"] in text) < 2:
-        problems.append("fewer than two variants referenced by name")
+        problems.append(_t('fewer than two variants referenced by name'))
     if not any(rid in text for rid in SCENARIO["requirements"]):
-        problems.append(f"recommendation not tied to a scenario requirement ({', '.join(SCENARIO['requirements'])})")
+        problems.append(_t('recommendation not tied to a scenario requirement ({v})', v=', '.join(SCENARIO['requirements'])))
     if len(str(concl.get("limitations", "")).split()) < 12:
-        problems.append("limitations missing or too short")
-    if re.search(r"\b(best model|always better|universally)\b", text, re.I):
-        problems.append("claims a universal winner")
-    c.record("PRF-05", not problems, "Conclusion: " + "; ".join(problems) + ".", "Conclusion is conditional, evidenced and states limitations.")
+        problems.append(_t('limitations missing or too short'))
+    if re.search(r"\b(best model|always better|universally|mejor modelo|siempre (es )?mejor|universalmente)\b", fold(text)):
+        problems.append(_t('claims a universal winner'))
+    c.record("PRF-05", not problems, _t('Conclusion: ') + "; ".join(problems) + ".", _t('Conclusion is conditional, evidenced and states limitations.'))
 
     mismatch = []
     costs = submission.get("unit_costs") or {}
@@ -170,7 +172,7 @@ def validate(submission: Any, c: Checker) -> None:
         for k, tol in (("quality", 1e-6), ("p50_latency_ms", 0.51), ("mean_cost", 1e-6)):
             if not isinstance(rep.get(k), (int, float)) or abs(rep[k] - fresh[k]) > tol + abs(fresh[k]) * 1e-6:
                 mismatch.append(f"{v['name']}.{k}")
-    c.record("PRF-06", not mismatch, f"Re-running the submitted configuration does not reproduce: {', '.join(mismatch[:6])}.", "Re-running the benchmark reproduces every reported number.")
+    c.record("PRF-06", not mismatch, _t('Re-running the submitted configuration does not reproduce: {v}.', v=', '.join(mismatch[:6])), _t('Re-running the benchmark reproduces every reported number.'))
     c.evidence.update({"tasks": len(ids), "variants": len(valid)})
 
 
@@ -186,7 +188,7 @@ def probes(submission: Any) -> List[Dict[str, Any]]:
         except Exception:  # noqa: BLE001
             return
         res = check_public(LAB, s)
-        out.append({"id": pid, "description": f"{description} is caught by {target}", "ok": any(ch.id == target and ch.status == "fail" for ch in res.checks)})
+        out.append({"id": pid, "description": _t('{description} is caught by {target}', description=_t(description), target=target), "ok": any(ch.id == target and ch.status == "fail" for ch in res.checks)})
 
     def fudge(s):
         name = s["variants"][0]["name"]
@@ -199,3 +201,34 @@ def probes(submission: Any) -> List[Dict[str, Any]]:
 
 
 register(LAB, REQUIREMENTS, validate, probes)
+
+
+add_catalog({
+    "The benchmark has {v} distinct known tasks": "El benchmark tiene {v} tareas conocidas distintas",
+    " and unknown ids {v}": " e IDs desconocidos {v}",
+    "; at least 20 are required.": "; se necesitan al menos 20.",
+    "{v} tasks.": "{v} tareas.",
+    "Found {n_sigs} distinct valid variant configuration(s); at least 2 are required (models: {v}).":
+        "Hay {n_sigs} configuración(es) de variante válida(s) y distinta(s); se necesitan al menos 2 (modelos: {v}).",
+    "{n_sigs} variants compared.": "{n_sigs} variantes comparadas.",
+    "The quality metric needs a name and a definition of at least a sentence.":
+        "La métrica de calidad necesita un nombre y una definición de al menos una oración.",
+    "Quality metric defined.": "Métrica de calidad definida.",
+    "Missing quality/latency/cost numbers for: {v}.": "Faltan las cifras de calidad, latencia o costo de: {v}.",
+    "all variants": "todas las variantes",
+    "Latency and cost captured for every variant.": "Latencia y costo registrados para cada variante.",
+    "no measured numbers cited": "no cita cifras medidas",
+    "fewer than two variants referenced by name": "nombra menos de dos variantes",
+    "recommendation not tied to a scenario requirement ({v})": "la recomendación no está ligada a un requisito del escenario ({v})",
+    "limitations missing or too short": "faltan las limitaciones o son demasiado breves",
+    "claims a universal winner": "proclama un ganador universal",
+    "Conclusion: ": "Conclusión: ",
+    "Conclusion is conditional, evidenced and states limitations.":
+        "La conclusión es condicional, se apoya en evidencia e indica sus limitaciones.",
+    "Re-running the submitted configuration does not reproduce: {v}.": "Al volver a ejecutar la configuración entregada no se reproduce: {v}.",
+    "Re-running the benchmark reproduces every reported number.": "Al volver a ejecutar el benchmark se reproducen todas las cifras declaradas.",
+    "{description} is caught by {target}": "{description}: lo detecta {target}",
+    "A reported quality nudged up by 5 points": "Una calidad declarada inflada en 5 puntos",
+    "A 10-task benchmark": "Un benchmark de 10 tareas",
+    "A conclusion that names a universal best model": "Una conclusión que nombra un mejor modelo universal",
+})

@@ -1,0 +1,139 @@
+#! lab_id: lab-08 output: labs/lab-08-tool-contracts.es.ipynb
+%%md
+# FMSE Laboratorio 08 - Extracción tipada y contrato de herramienta
+
+**Curso:** FMSE 2026 · **Módulo 8:** Interfaces estructuradas y contratos de herramientas · **Fase:** Construir · **Nivel:** Ingeniería
+
+La página del curso y tu progreso están en [agentic-ai.es/academy/fmse/learn/m08-structured-interfaces](https://agentic-ai.es/academy/fmse/learn/m08-structured-interfaces).
+
+> **Sobre el idioma.** El código, los nombres de las variables, las claves de los datos y los datos de ejemplo se quedan en inglés; los mensajes de los validadores están en español. Puedes escribir tus respuestas en español o en inglés: los validadores aceptan los dos idiomas.
+%%md
+## 0. Misión y competencia objetivo
+
+**Misión.** Diseñar el contrato de una herramienta de órdenes de compra que no pueda superar los límites aprobados de cantidad y precio, ni hacer una escritura sin evidencia explícita de autorización.
+
+**Laboratorio guiado.** Partes de un prompt que pide JSON sin más y migras a una salida restringida por un esquema, con validación determinista.
+
+**Competencia objetivo (resultados del Módulo 8):**
+- Distinguir entre un JSON válido, una salida válida según el esquema, una salida semánticamente correcta y una salida segura.
+- Diseñar contratos tipados de herramientas y funciones, con descripciones claras, restricciones en los argumentos y una semántica de errores definida.
+- Usar la salida estructurada nativa del proveedor cuando exista, y entender la decodificación restringida por gramática para la inferencia propia.
+- Diseñar reintentos acotados y validadores deterministas, sin bucles de "reparación" infinitos.
+
+**Guía:** alrededor de un 25% guiado y un 75% por tu cuenta. Es un **reto de ingeniería**: el experimento guiado (secciones 4 y 5) te da un camino de referencia que funciona; el reto (sección 6), no.
+%%md
+## 1. Requisitos y criterios de aceptación
+
+Estos requisitos los comprueban validadores públicos. Te dicen *qué requisito* falló y por qué, nunca la implementación que se esperaba.
+
+| ID | Requisito |
+| --- | --- |
+| TOOL-01 | La salida es válida según el esquema **(crítico)** |
+| TOOL-02 | El validador de dominio detecta los datos semánticamente inválidos |
+| TOOL-03 | Se declara si la herramienta modifica datos |
+| TOOL-04 | Las escrituras exigen un campo de autorización **(crítico)** |
+| TOOL-05 | El bucle de reintentos está acotado |
+
+**Control de competencia (portal):** 100% de conformidad con el esquema en el conjunto adversarial público; las pruebas semánticas PASAN. También hay que aprobar el cuestionario (>= 80%) y completar el laboratorio guiado, el artefacto y la reflexión. Un requisito crítico no se compensa con otras puntuaciones.
+%%md
+## 2. Preparación del entorno
+%%setup
+%%md
+## 3. Comprobación de secretos
+
+Este laboratorio funciona por completo sin conexión: no necesita ninguna clave de proveedor. Si usas claves en otros laboratorios, guárdalas en los Secretos de Colab; nunca se imprimen.
+%%code
+fmse.secrets_check()
+%%md
+## 4. Experimento guiado
+
+Un modelo con guion responde con texto sin procesar a una solicitud de orden de compra: a veces lo devuelve entre marcas de bloque de código, a veces mal formado, con tipos incorrectos o con campos de más. El punto de partida es `raw_json_prompt_extract`: pedir JSON y pasar por `json.loads` lo que llegue.
+%%code
+from fmse_labkit.labs import lab08
+import json
+
+guided = fmse.GuidedLog(LAB_ID, required_steps=["raw_json_observed", "schema_validation_observed"])
+print(json.dumps(lab08.PO_SCHEMA, indent=2))
+print("Aprobaciones:", lab08.APPROVALS)
+%%md
+## 5. Predice antes de ejecutar
+
+Para cada salida con guion (limpia, fenced_json, mal formada, tipos incorrectos, campo de más): ¿va a funcionar `json.loads`? Y si funciona, ¿el resultado será correcto? Escribe tu predicción y después ejecuta el experimento.
+%%code
+my_prediction = ""
+guided.predict("prediction", my_prediction)
+%%code
+for name, outputs in lab08.EXTRACTION_CASES:
+    try:
+        data = lab08.raw_json_prompt_extract(lab08.ScriptedModel(outputs), "PO request")
+        print(f"{name:<24} analizado: {data}  errores de esquema: {fmse.schema.validate(data, lab08.PO_SCHEMA)}")
+    except Exception as exc:
+        print(f"{name:<24} lanzó {type(exc).__name__}")
+guided.step("raw_json_observed")
+guided.step("schema_validation_observed")
+guided.outcome("prediction", "ver la salida de arriba")
+%%md
+**Hoja de trabajo.** Anota lo que observaste, al menos una frase completa por campo: estas observaciones forman parte de la evidencia de tu laboratorio guiado.
+%%code
+worksheet = {
+    "raw_json_failures": "",  # ¿Qué salidas rompieron json.loads y cuáles pasaron con un resultado incorrecto?
+    "schema_effect": "",  # ¿Qué detectó la validación contra el esquema y qué se le escapó?
+    "prediction_check": "",  # ¿Acertaste en tu predicción? ¿Qué se te escapó?
+}
+guided.observe(worksheet)
+%%md
+## 6. Reto
+
+**Contrato de la herramienta de órdenes de compra.** Diseña el contrato de una herramienta de órdenes de compra que no pueda superar los límites aprobados de cantidad y precio, ni hacer una escritura sin evidencia explícita de autorización.
+
+Restricciones:
+- 100% de conformidad con el esquema en el conjunto adversarial público (crítico).
+- Las escrituras exigen una evidencia de autorización que la aplicación pueda verificar.
+%%code
+contracts = []  # {"name", "description", "mutability": "read"|"write", "idempotency", "parameters": JSON Schema, "errors": [...]}
+
+
+def validate_call(tool, args, context):
+    """Devuelve {"status": "valid"|"retryable"|"escalate", "errors": [...]}; context["approvals"] contiene los registros de aprobación."""
+    raise NotImplementedError
+
+
+def structured_extract(model, text, schema, max_attempts=3):
+    """Devuelve {"status": "valid"|"escalate", "data": ..., "attempts": n}; nunca marques como válidos datos que incumplen el esquema."""
+    raise NotImplementedError
+%%md
+## 7. Validación pública
+%%code
+submission = {"contracts": contracts, "validate_call": validate_call, "structured_extract": structured_extract}
+result = fmse.check_public(LAB_ID, submission)
+result.show()
+%%md
+## 8. Robustez / pruebas adversariales
+
+Condiciones adversariales que van más allá de la batería que se califica. No cambian tu puntuación: te muestran dónde es frágil tu solución.
+%%code
+probe_results = fmse.probe(LAB_ID, submission)
+%%md
+## 9. Reflexión de ingeniería
+
+La reflexión que se califica se escribe en el portal y se guarda con tu artefacto. Si te sirve, haz aquí un borrador:
+- **Decisión:** ¿qué comprobaciones pusiste en el esquema y cuáles en el validador de dominio? ¿Por qué?
+- **Compromisos:** ¿cuántos intentos de reparación permitiste, y cuánto cuesta cada intento de más?
+- **Riesgos pendientes:** ¿qué podría seguir haciendo mal una llamada que es válida según el esquema y está autorizada?
+%%code
+reflection_draft = {"decision": "", "tradeoffs": "", "remaining_risks": ""}
+%%md
+## 10. Exportar el artefacto / resultado de finalización
+
+Exporta el artefacto **Especificación de interfaces (contratos de herramientas al estilo de JSON Schema/OpenAPI)** e imprime un registro de finalización. Pega el registro en la página del Módulo 8 de agentic-ai.es (**Importar el resultado del laboratorio**). El registro es un documento del flujo de aprendizaje, no un certificado firmado.
+%%code
+artifact = fmse.export_artifact(LAB_ID, {"contracts": contracts}, title="Especificación de interfaces (contratos de herramientas al estilo de JSON Schema/OpenAPI)", fmt="json")
+record = fmse.make_completion_record(
+    LAB_ID,
+    result,
+    {"reflection_draft": reflection_draft, **{}},
+    artifact=artifact,
+    guided=guided,
+    probes=probe_results,
+)
+fmse.show_record(record)

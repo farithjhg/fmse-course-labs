@@ -1,0 +1,166 @@
+#! lab_id: lab-00 output: labs/lab-00-task-framing.es.ipynb
+%%md
+# FMSE Laboratorio 00 - Laboratorio de planteamiento de tareas
+
+**Curso:** Foundation Model Systems Engineering (FMSE 2026) · **Módulo 0:** Fundamentos del usuario avanzado de IA · **Fase:** Fundamentos · **Nivel:** Fundamentos
+
+Este notebook es el entorno del laboratorio. La página del curso, tu progreso y tu Cuaderno de Ingeniería están en
+[agentic-ai.es/academy/fmse/learn/m00-ai-power-user](https://agentic-ai.es/academy/fmse/learn/m00-ai-power-user).
+Avanza de arriba abajo: cada sección tiene un propósito.
+
+> **Sobre el idioma.** El notebook, las explicaciones y los mensajes de los validadores están en español. El código, los nombres de las variables y las claves de los datos se quedan en inglés (son lo que leen los validadores), y algunos datos de ejemplo también están en inglés. Puedes escribir tus respuestas en español o en inglés: los validadores aceptan los dos idiomas.
+
+%%md
+## 0. Misión y competencia objetivo
+
+**Misión.** Demostrar, con evidencia, que plantear bien una tarea (intención, evidencia, restricciones, criterios de éxito, gestión de la incertidumbre, interfaz de salida) cambia la calidad de lo que produce un modelo, y después escribir un brief de tarea de IA de una página para una solicitud ambigua de la dirección.
+
+**Competencia objetivo (resultados del Módulo 0):**
+- Explicar la diferencia práctica entre el conocimiento del modelo, el contexto que le das, la búsqueda web y las herramientas externas.
+- Plantear una tarea con intención, evidencia, restricciones, criterios de éxito y requisitos de interfaz.
+- Usar prompts iterativos, críticas, rúbricas, ejemplos y entradas multimodales sin sobreinstruir a los modelos de razonamiento capaces.
+- Reconocer la complacencia, las afirmaciones sin respaldo, la evidencia que falta y cuándo hace falta verificación humana.
+
+**Guía:** etapa de fundamentos, con alrededor de un 70% guiado y un 30% por tu cuenta. El experimento guiado (secciones 4 y 5) te da un camino de referencia completo; el reto (sección 6), no.
+
+%%md
+## 1. Requisitos y criterios de aceptación
+
+Tu brief de tarea de IA lo comprueban validadores públicos. Son visibles a propósito (te enseñan cómo se evalúa el trabajo) y te dicen *qué requisito* falló, nunca el texto que se esperaba.
+
+| ID | Requisito |
+| --- | --- |
+| TB-01 | Existen todas las secciones obligatorias del brief |
+| TB-02 | Los criterios de éxito se pueden medir o inspeccionar |
+| TB-03 | Las fuentes de evidencia se distinguen de los supuestos |
+| TB-04 | Ninguna instrucción pide razonamiento privado u oculto |
+
+**Control de competencia (portal):** cuestionario >= 80%; el validador del artefacto PASA; reflexión del reto completada. También hay que completar el laboratorio guiado (con las predicciones y la hoja de trabajo registradas).
+
+%%md
+## 2. Preparación del entorno
+
+Carga el kit de laboratorio del curso (`fmse_labkit`) y activa los mensajes en español. La celda es idempotente: puedes volver a ejecutarla sin problema. No necesita ninguna API key.
+
+%%setup
+%%md
+## 3. Comprobación de secretos
+
+Todos los laboratorios funcionan **sin conexión**, contra un simulador didáctico determinista. Si quieres repetir el experimento guiado con un modelo real, agrega tu propia clave en los **Secretos** de Colab (el icono de la llave, en la barra lateral izquierda): `GEMINI_API_KEY`, `OPENAI_API_KEY` o `ANTHROPIC_API_KEY`, además de `FMSE_PROVIDER` y `FMSE_MODEL`. Nunca pegues una clave en una celda. Esta comprobación solo dice si la clave existe, nunca su valor.
+
+%%code
+fmse.secrets_check()
+%%md
+## 4. Experimento guiado
+
+Vas a ejecutar dos briefs para la misma solicitud contra el modelo del laboratorio:
+
+- un brief **débil**: una frase, sin evidencia y sin criterios;
+- un brief **sólido**: intención, plan de evidencia (fuentes frente a supuestos), restricciones, criterios de éxito, gestión de la incertidumbre e interfaz de salida.
+
+El simulador (se usa salvo que hayas configurado un proveedor real) **no es un modelo de lenguaje**. Rellena lo que el brief deja abierto con un valor por defecto verosímil, que es exactamente como los briefs poco especificados producen salidas seguras de sí mismas e imposibles de verificar. Sus reglas están documentadas en `fmse_labkit/labs/lab00.py`.
+
+%%code
+from fmse_labkit.labs import lab00
+
+guided = fmse.GuidedLog(LAB_ID, required_steps=["run_weak_brief", "run_strong_brief", "compare_outputs"])
+model = fmse.model.get_model(lab00.simulated_brief_response)
+
+print("SOLICITUD:", lab00.request(), "\n")
+print("BRIEF DÉBIL:\n", lab00.weak_brief(), "\n")
+print("BRIEF SÓLIDO:\n", lab00.strong_brief())
+%%md
+## 5. Predice antes de ejecutar
+
+Antes de ejecutar la celda siguiente, escribe lo que esperas. ¿Qué brief cumplirá más puntos de la lista de aceptación de abajo, y qué punto concreto crees que no cumplirá el brief débil?
+
+Lista de aceptación: *cada cifra cita una fuente · indica la incertidumbre · sigue la estructura pedida · centrado (como máximo 3 causas)*.
+
+%%code
+# Sustituye la cadena vacía por tu predicción y ejecuta esta celda.
+my_prediction = ""
+guided.predict("weak_vs_strong", my_prediction)
+%%code
+weak = model.complete(lab00.weak_brief())
+guided.step("run_weak_brief")
+strong = model.complete(lab00.strong_brief())
+guided.step("run_strong_brief")
+
+for label, response in (("DÉBIL", weak), ("SÓLIDO", strong)):
+    print(f"--- Salida del brief {label} ({response.provider}, {response.input_tokens} tokens de entrada / {response.output_tokens} de salida, {response.latency_ms} ms)")
+    print(response.text, "\n")
+
+comparison = {"weak": lab00.evaluate_output(weak.text), "strong": lab00.evaluate_output(strong.text)}
+for item in comparison["weak"]:
+    w = "se cumple" if comparison["weak"][item] else "NO se cumple"
+    s = "se cumple" if comparison["strong"][item] else "NO se cumple"
+    print(f"{item:<35} débil: {w:<13} sólido: {s}")
+guided.step("compare_outputs")
+guided.outcome("weak_vs_strong", comparison)
+%%md
+**Hoja de trabajo.** Anota lo que observaste. Al menos una frase completa por campo: estas observaciones forman parte de la evidencia de tu laboratorio guiado.
+
+%%code
+worksheet = {
+    "difference_observed": "",  # ¿Qué cambió entre las dos salidas, en concreto?
+    "unsupported_claims": "",  # ¿Qué afirmaciones de la salida débil no se podían verificar, y por qué?
+    "prediction_check": "",  # ¿Acertaste en tu predicción? ¿Qué se te escapó?
+}
+guided.observe(worksheet)
+%%md
+## 6. Reto
+
+**Reto de ingeniería y diseño.** A partir de la solicitud ambigua de la dirección que aparece abajo, escribe un **brief de tarea de IA** de una página con intención, plan de evidencia, restricciones, criterios de éxito, gestión de la incertidumbre e interfaz de salida.
+
+No hay plantilla de prompt, y copiar el brief sólido de la sección 4 no te servirá: se escribió para otra decisión. Escribe el brief en **Markdown** (un encabezado `##` por sección, en español o en inglés: por ejemplo `## Intención`, `## Plan de evidencia` con `### Fuentes` y `### Supuestos`, `## Restricciones`, `## Criterios de éxito`, `## Gestión de la incertidumbre`, `## Interfaz de salida`) o en **YAML** (una clave por sección).
+
+%%code
+print(lab00.request())
+%%code
+my_brief = """
+"""
+%%md
+## 7. Validación pública
+
+Ejecuta los validadores públicos. Los comentarios nombran el requisito y el motivo; las pistas son conceptuales. Revisa y vuelve a ejecutar tantas veces como necesites.
+
+%%code
+result = fmse.check_public(LAB_ID, my_brief)
+result.show()
+%%md
+## 8. Robustez / pruebas adversariales
+
+Un buen validador tiene que detectar versiones degradadas de tu brief. Las pruebas lo alteran (quitan el plan de evidencia, vuelven vagos los criterios, agregan una petición de razonamiento oculto) y confirman que cada cambio se detecta. Después, tu brief se ejecuta contra el modelo y se le aplica la misma lista de aceptación.
+
+%%code
+probe_results = fmse.probe(LAB_ID, my_brief)
+if my_brief.strip():
+    challenge_output = model.complete(my_brief)
+    print("\nSalida del modelo para tu brief:\n", challenge_output.text)
+%%md
+## 9. Reflexión de ingeniería
+
+La reflexión que se califica se escribe en el portal (se guarda con tu artefacto en el Cuaderno de Ingeniería). Si quieres, haz aquí un borrador: viaja en el registro de finalización para que el portal pueda rellenarlo de antemano.
+
+- **Decisión:** ¿qué decidiste incluir en el brief y por qué es el planteamiento adecuado para esta solicitud?
+- **Compromisos:** ¿qué dejaste fuera o limitaste, y qué te costó?
+- **Riesgos pendientes:** ¿dónde podría seguir fallando la salida y cuándo hace falta verificación humana?
+
+%%code
+reflection_draft = {"decision": "", "tradeoffs": "", "remaining_risks": ""}
+%%md
+## 10. Exportar el artefacto / resultado de finalización
+
+Exporta tu brief como el artefacto **Brief de tarea de IA** e imprime un registro de finalización. Copia el registro (entre los marcadores) y pégalo en el portal: **Importar el resultado del laboratorio**, en la página del Módulo 0. El registro es un documento del flujo de aprendizaje, no un certificado firmado.
+
+%%code
+artifact = fmse.export_artifact(LAB_ID, my_brief, title="Brief de tarea de IA", fmt="markdown" if my_brief.lstrip().startswith("#") else "yaml")
+record = fmse.make_completion_record(
+    LAB_ID,
+    result,
+    {"reflection_draft": reflection_draft, "guided_comparison": comparison},
+    artifact=artifact,
+    guided=guided,
+    probes=probe_results,
+)
+fmse.show_record(record)

@@ -17,6 +17,7 @@ from __future__ import annotations
 from typing import Any, Dict, List
 
 from ..core import Checker, call_learner, capture_output, register
+from ..i18n import add_catalog, t as _t
 
 LAB = "lab-15"
 
@@ -81,7 +82,7 @@ def validate(submission: Any, c: Checker) -> None:
         raise ValueError("submit a dict with manifest, policy, gate, rollback, trace_schema and runbook")
     m = submission.get("manifest") or {}
     missing = [k for k in MANIFEST_KEYS if not m.get(k)]
-    c.record("REL-01", not missing, f"Manifest missing: {', '.join(missing)}.", "Manifest versions code, prompts, tool schemas, model/config, data/eval and thresholds.")
+    c.record("REL-01", not missing, _t('Manifest missing: {v}.', v=', '.join(missing)), _t('Manifest versions code, prompts, tool schemas, model/config, data/eval and thresholds.'))
 
     gate, policy = submission.get("gate"), submission.get("policy") or {}
     decisions = {}
@@ -92,8 +93,8 @@ def validate(submission: Any, c: Checker) -> None:
                 decisions[rid] = (res or {}) if isinstance(res, dict) and not err else {"decision": f"error: {err}"}
     ra = decisions.get("R-A", {})
     c.record("REL-02", ra.get("decision") == "block" and "C-02" in " ".join(map(str, ra.get("reasons", []))),
-             f"A release that improves the average but fails protected case C-02 was {ra.get('decision', 'not evaluated')!r}; it must be blocked with a reason naming the case.",
-             "Protected-case regressions block regardless of the aggregate.")
+             _t('A release that improves the average but fails protected case C-02 was {v}; it must be blocked with a reason naming the case.', v=repr(ra.get('decision', 'not evaluated'))),
+             _t('Protected-case regressions block regardless of the aggregate.'))
 
     rb = submission.get("rollback") or {}
     crit = [x for x in (rb.get("criteria") or []) if isinstance(x, dict) and all(str(x.get(k, "")).strip() for k in ("metric", "threshold", "window"))]
@@ -109,21 +110,21 @@ def validate(submission: Any, c: Checker) -> None:
     runbook = submission.get("runbook") or {}
     rb_ok = bool(runbook.get("owner")) and len(runbook.get("rollback_steps") or []) >= 2 and bool(runbook.get("kill_switch"))
     c.record("REL-03", len(crit) >= 2 and not wrong and rb_ok,
-             f"Need 2+ rollback criteria (metric, threshold, window), a should_rollback that decides the canaries correctly (wrong: {', '.join(wrong) or 'none'}), and a runbook with owner, rollback_steps and kill_switch.",
-             "Rollback criteria are explicit, executable and backed by a runbook.")
+             _t('Need 2+ rollback criteria (metric, threshold, window), a should_rollback that decides the canaries correctly (wrong: {v}), and a runbook with owner, rollback_steps and kill_switch.', v=', '.join(wrong) or 'none'),
+             _t('Rollback criteria are explicit, executable and backed by a runbook.'))
 
     ts = (submission.get("trace_schema") or {}).get("events") or {}
     gaps = [f"{ev}.{f}" for ev, fields in TRACE_EVENTS.items() for f in fields if f not in (ts.get(ev) or {}).get("required", [])]
-    c.record("REL-04", not gaps, f"Trace schema missing required fields: {', '.join(gaps[:8])}{'...' if len(gaps) > 8 else ''}.", "Model, retrieval and tool events are fully traceable.")
+    c.record("REL-04", not gaps, _t('Trace schema missing required fields: {v}{v2}.', v=', '.join(gaps[:8]), v2='...' if len(gaps) > 8 else ''), _t('Model, retrieval and tool events are fully traceable.'))
 
     slo = policy.get("slo") or {}
     bad = [k for k in ("p95_latency_ms", "cost_per_task") if not isinstance((slo.get(k) or {}).get("max"), (int, float)) or (slo.get(k) or {}).get("requirement") not in NFR_REQUIREMENTS]
     c.record("REL-05", not bad and decisions.get("R-C", {}).get("decision") == "block",
-             f"SLOs need a numeric max and a requirement id from NFR_REQUIREMENTS (problems: {', '.join(bad) or 'none'}), and the gate must block the latency breach (R-C).",
-             "Latency and cost SLOs trace to requirements and are enforced.")
+             _t('SLOs need a numeric max and a requirement id from NFR_REQUIREMENTS (problems: {v}), and the gate must block the latency breach (R-C).', v=', '.join(bad) or 'none'),
+             _t('Latency and cost SLOs trace to requirements and are enforced.'))
 
     mismatch = [f"{rid}: {decisions.get(rid, {}).get('decision')!r} (expected {exp})" for rid, exp in EXPECTED.items() if decisions.get(rid, {}).get("decision") != exp]
-    c.record("REL-06", not mismatch, f"Release simulation mismatches: {'; '.join(mismatch)}.", "All four candidates handled correctly.")
+    c.record("REL-06", not mismatch, _t('Release simulation mismatches: {v}.', v='; '.join(mismatch)), _t('All four candidates handled correctly.'))
     c.evidence["decisions"] = {k: v.get("decision") for k, v in decisions.items()}
 
 
@@ -143,9 +144,31 @@ def probes(submission: Any) -> List[Dict[str, Any]]:
     cost_breach = {**CANDIDATES["R-B"], "metrics": {**CANDIDATES["R-B"]["metrics"], "cost_per_task": 0.02}}
     res2, err2 = call_learner(gate, CURRENT, cost_breach, policy)
     return [
-        {"id": "P1", "description": "A failing critical-severity case blocks", "ok": isinstance(res, dict) and res.get("decision") == "block"},
-        {"id": "P2", "description": "A cost SLO breach blocks", "ok": isinstance(res2, dict) and res2.get("decision") == "block"},
+        {"id": "P1", "description": _t('A failing critical-severity case blocks'), "ok": isinstance(res, dict) and res.get("decision") == "block"},
+        {"id": "P2", "description": _t('A cost SLO breach blocks'), "ok": isinstance(res2, dict) and res2.get("decision") == "block"},
     ]
 
 
 register(LAB, REQUIREMENTS, validate, probes)
+
+
+add_catalog({
+    "Manifest missing: {v}.": "Al manifiesto le falta: {v}.",
+    "Manifest versions code, prompts, tool schemas, model/config, data/eval and thresholds.":
+        "El manifiesto versiona el código, los prompts, los esquemas de herramientas, el modelo y su configuración, los datos y la evaluación, y los umbrales.",
+    "A release that improves the average but fails protected case C-02 was {v}; it must be blocked with a reason naming the case.":
+        "Una versión que mejora el promedio pero falla el caso protegido C-02 recibió {v}; debe bloquearse con un motivo que nombre el caso.",
+    "Protected-case regressions block regardless of the aggregate.": "Las regresiones en casos protegidos bloquean, sea cual sea el agregado.",
+    "Need 2+ rollback criteria (metric, threshold, window), a should_rollback that decides the canaries correctly (wrong: {v}), and a runbook with owner, rollback_steps and kill_switch.":
+        "Se necesitan 2 o más criterios de marcha atrás (metric, threshold, window), un should_rollback que decida bien los canarios (incorrectos: {v}) y un runbook con owner, rollback_steps y kill_switch.",
+    "Rollback criteria are explicit, executable and backed by a runbook.": "Los criterios de marcha atrás son explícitos, ejecutables y están respaldados por un runbook.",
+    "Trace schema missing required fields: {v}{v2}.": "Al esquema de trazas le faltan campos obligatorios: {v}{v2}.",
+    "Model, retrieval and tool events are fully traceable.": "Los eventos de modelo, de recuperación y de herramientas son totalmente trazables.",
+    "SLOs need a numeric max and a requirement id from NFR_REQUIREMENTS (problems: {v}), and the gate must block the latency breach (R-C).":
+        "Los SLO necesitan un máximo numérico y un ID de requisito de NFR_REQUIREMENTS (problemas: {v}), y el control debe bloquear el incumplimiento de latencia (R-C).",
+    "Latency and cost SLOs trace to requirements and are enforced.": "Los SLO de latencia y costo son trazables a requisitos y se aplican.",
+    "Release simulation mismatches: {v}.": "Discrepancias en la simulación de la versión: {v}.",
+    "All four candidates handled correctly.": "Los cuatro candidatos se manejan correctamente.",
+    "A failing critical-severity case blocks": "Un caso de gravedad crítica que falla bloquea",
+    "A cost SLO breach blocks": "Un incumplimiento del SLO de costo bloquea",
+})

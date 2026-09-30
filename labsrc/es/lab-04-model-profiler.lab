@@ -1,0 +1,152 @@
+#! lab_id: lab-04 output: labs/lab-04-model-profiler.es.ipynb
+%%md
+# FMSE Laboratorio 04 - Perfilador de modelos
+
+**Curso:** FMSE 2026 · **Módulo 4:** Mecánica de los modelos fundacionales y economía de la inferencia · **Fase:** Investigar · **Nivel:** Profesional
+
+Página del curso y progreso: [agentic-ai.es/academy/fmse/learn/m04-model-mechanics](https://agentic-ai.es/academy/fmse/learn/m04-model-mechanics).
+
+> **Sobre el idioma.** El código, las claves de los datos y las tareas de ejemplo se quedan en inglés; los mensajes de los validadores están en español. La conclusión puedes escribirla en español.
+
+%%md
+## 0. Misión y competencia objetivo
+
+**Misión.** Diseñar y ejecutar un mini benchmark de 20 tareas. Entregar una recomendación condicionada a los requisitos, no un "mejor modelo" universal.
+
+**Laboratorio guiado.** Un wrapper independiente del proveedor registra la latencia, el número de tokens, las métricas de éxito y las estimaciones de costo.
+
+**Competencia objetivo (resultados del Módulo 4):**
+- Explicar la tokenización, las ventanas de contexto, el prefill, el decode, los tokens y el esfuerzo de razonamiento, y de dónde suele venir la latencia.
+- Perfilar el compromiso entre calidad, latencia y costo de distintas configuraciones de modelo.
+- Reconocer cuándo ayudan los ejemplos o las instrucciones paso a paso, y cuándo restringen de más el razonamiento.
+- Redactar un informe de caracterización del modelo en lugar de elegirlo solo por su fama.
+
+**Guía:** alrededor de un 50% guiado y un 50% por tu cuenta. Es un **reto de ingeniería**: la parte guiada te da un camino de referencia que funciona; el reto, no.
+
+%%md
+## 1. Requisitos y criterios de aceptación
+
+Los validadores públicos comprueban estos requisitos. Te dicen qué requisito falló y por qué, nunca la implementación que se esperaba.
+
+| ID | Requisito |
+| --- | --- |
+| PRF-01 | El benchmark contiene >=20 muestras |
+| PRF-02 | Se comparan al menos 2 variantes de modelo o de configuración |
+| PRF-03 | La métrica de calidad está definida |
+| PRF-04 | Se registran la latencia y el costo |
+| PRF-05 | La conclusión cita evidencia medida y sus limitaciones |
+| PRF-06 | El benchmark es reproducible |
+
+**Control de competencia (portal):** benchmark reproducible; el informe PASA. También necesitas el cuestionario >= 80%, el laboratorio guiado, el artefacto y tu reflexión. Un requisito crítico no se compensa con otras puntuaciones.
+
+%%md
+## 2. Preparación del entorno
+
+%%setup
+%%md
+## 3. Comprobación de secretos
+
+Este laboratorio funciona completamente sin conexión: no necesitas ninguna clave de proveedor. Las claves que uses en otros laboratorios van en los Secretos de Colab y nunca se imprimen.
+
+%%code
+fmse.secrets_check()
+%%md
+## 4. Experimento guiado
+
+`lab04.run_variant` es un wrapper de perfilado independiente del proveedor. Para cada tarea registra si la respuesta es correcta, los tokens de entrada, de salida y de razonamiento, el tiempo hasta el primer token (TTFT), la latencia total y el costo. Los modelos simulados se comportan de forma determinista y documentada; los costos unitarios son cifras hipotéticas que eliges tú.
+
+%%code
+from fmse_labkit.labs import lab04
+import statistics
+
+guided = fmse.GuidedLog(LAB_ID, required_steps=["profile_short_vs_long", "compare_variants"])
+tasks = lab04.task_pool()
+unit_costs = {"sim-fast": 0.0004, "sim-reasoning": 0.004, "sim-small": 0.0001}  # hipotéticos, por cada mil tokens
+print(len(tasks), "tareas;", sum(t["long_context"] for t in tasks), "son de contexto largo")
+print("Escenario:", lab04.SCENARIO)
+%%md
+## 5. Predice antes de ejecutar
+
+Para una misma respuesta corta, ¿cómo cambiará el TTFT entre un prompt corto y uno de contexto largo? ¿Qué variante será la más lenta, y por qué? Escribe tu predicción y después ejecuta el experimento.
+
+%%code
+my_prediction = ""
+guided.predict("prediction", my_prediction)
+%%code
+fast = {"name": "fast", "model": "sim-fast", "effort": "low", "prompt_style": "objective"}
+for t in (tasks[1], tasks[0]):
+    r = lab04.run_variant(fast, t, unit_costs)
+    print(f"{t['id']} long_context={t['long_context']}: TTFT {r['ttft_ms']} ms, total {r['latency_ms']} ms, entrada {r['input_tokens']} tokens")
+guided.step("profile_short_vs_long")
+ids = [t["id"] for t in tasks[:12]]
+for v in (fast, {"name": "reasoning", "model": "sim-reasoning", "effort": "high", "prompt_style": "objective"}):
+    print(v["name"], lab04.summarize(lab04.profile(v, ids, unit_costs)))
+guided.step("compare_variants")
+guided.outcome("prediction", "ver la salida de arriba")
+%%md
+**Hoja de trabajo.** Al menos una frase completa por campo: estas observaciones forman parte de la evidencia de tu laboratorio guiado.
+
+%%code
+worksheet = {
+    "prefill_observation": "",
+    "tradeoff_observation": "",
+    "prediction_check": "",
+}
+guided.observe(worksheet)
+%%md
+## 6. Reto
+
+**Mini benchmark e informe de caracterización.** Diseña y ejecuta un mini benchmark de 20 tareas. Entrega una recomendación condicionada a los requisitos, no un "mejor modelo" universal.
+
+Restricciones:
+- Los costos unitarios son valores hipotéticos que eliges tú; nunca dejes precios reales fijos en el código.
+- La recomendación tiene que citar los ids de los requisitos del escenario.
+
+%%code
+my_benchmark = {
+    "benchmark": {"task_ids": [], "quality_metric": {"name": "", "definition": ""}},
+    "variants": [],  # {"name", "model", "effort", "prompt_style"}
+    "unit_costs": unit_costs,
+    "results": {},  # nombre de la variante -> lab04.summarize(lab04.profile(variant, task_ids, unit_costs))
+    "conclusion": {"recommendation": "", "evidence": "", "limitations": ""},
+}
+%%md
+## 7. Validación pública
+
+%%code
+submission = my_benchmark
+result = fmse.check_public(LAB_ID, submission)
+result.show()
+%%md
+## 8. Robustez / pruebas adversariales
+
+Condiciones adversariales que la batería calificada no cubre. No cambian tu puntuación: te enseñan dónde es frágil tu solución.
+
+%%code
+probe_results = fmse.probe(LAB_ID, submission)
+%%md
+## 9. Reflexión de ingeniería
+
+Se califica en el portal y se guarda con tu artefacto. Si te sirve, haz aquí un borrador:
+- **Decisión:** ¿qué variante recomiendas para cada requisito y qué evidencia medida lo respalda?
+- **Compromisos:** ¿a qué renuncia la variante que recomiendas (calidad, latencia o costo) y por qué es aceptable en este caso?
+- **Riesgos pendientes:** ¿qué podría hacer que este benchmark resulte engañoso con tráfico real?
+
+%%code
+reflection_draft = {"decision": "", "tradeoffs": "", "remaining_risks": ""}
+%%md
+## 10. Exportar el artefacto / resultado de finalización
+
+Exporta el artefacto **Informe de caracterización del modelo fundacional** e imprime un registro de finalización. Pega el registro en la página del Módulo 4 de agentic-ai.es (**Importar el resultado del laboratorio**). El registro es un documento del flujo de aprendizaje, no un certificado firmado.
+
+%%code
+artifact = fmse.export_artifact(LAB_ID, my_benchmark, title="Informe de caracterización del modelo fundacional", fmt="json")
+record = fmse.make_completion_record(
+    LAB_ID,
+    result,
+    {"reflection_draft": reflection_draft, **{}},
+    artifact=artifact,
+    guided=guided,
+    probes=probe_results,
+)
+fmse.show_record(record)
