@@ -13,7 +13,7 @@ implementation. Standard library only, so every lab runs on a fresh Colab
 runtime without installing anything.
 """
 
-__version__ = "1.1.0"
+__version__ = "1.1.1"
 COURSE_ID = "fmse-2026"
 COURSE_VERSION = "1.0"
 

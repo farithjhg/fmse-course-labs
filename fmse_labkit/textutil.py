@@ -122,6 +122,10 @@ SPANISH_TERMS: Dict[str, tuple] = {
     "security": ("seguridad",),
     "cost": ("coste", "costo"),
     "operational": ("operativo", "operativa", "operacional", "operacion"),
+    # Lab 10 AGT-05: the Spanish requirement says "referencia explícita al estado".
+    "state handle": ("identificador de estado", "referencia al estado", "referencias al estado",
+                     "referencia explicita al estado", "referencias explicitas al estado"),
+    "stateless": ("sin estado", "no tiene estado"),
 }
 
 

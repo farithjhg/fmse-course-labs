@@ -26,6 +26,7 @@ from typing import Any, Callable, Dict, List, Optional
 
 from ..core import Checker, call_learner, capture_output, register
 from ..i18n import add_catalog, t as _t
+from ..textutil import mentions
 
 LAB = "lab-10"
 MAX_STEPS = 8
@@ -186,7 +187,7 @@ def validate(submission: Any, c: Checker) -> None:
         c.evidence["mutations_executed"] = sum(len(r[0].mutations) for r in results.values())
 
     design = str((submission.get("design") or {}).get("state", "")) + " " + str((submission.get("design") or {}).get("description", ""))
-    ok = ("state_handle" in design or "state handle" in design.lower() or "stateless" in design.lower() or "sin estado" in design.lower() or "identificador de estado" in design.lower()) and len(design.split()) >= 20
+    ok = any(mentions(design, term) for term in ("state_handle", "state handle", "stateless")) and len(design.split()) >= 20
     c.record("AGT-05", ok, _t('The design must say (in 20+ words) whether state travels in an explicit state handle or the design is stateless, and where application state lives.'),
              _t('State design documented.'))
 
